@@ -4,7 +4,7 @@ const { User } = require('../models');
 const { USER_ROLES, USER_STATUSES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
 const { hashPassword } = require('../utils/password');
-const { toUserResponse } = require('./auth.service');
+const { toUserResponse } = require('../utils/userResponse');
 
 async function createInspector(owner, payload) {
   if (!owner.companyId) {

@@ -5,15 +5,18 @@ const authService = require('../services/auth.service');
 
 function requestMeta(req) {
   return {
+    ip: req.ip || '',
     userAgent: req.get('user-agent') || '',
-    ip: req.ip || req.connection?.remoteAddress || '',
   };
 }
 
 const authController = {
   register: asyncHandler(async (req, res) => {
-    const data = await authService.registerOwner(req.body, requestMeta(req));
-    res.status(201).json({ success: true, message: 'User created', data });
+    const data = await authService.registerOwner(req.body, {
+      ...requestMeta(req),
+      platform: 'web',
+    });
+    res.status(201).json({ success: true, message: 'Account created', data });
   }),
 
   login: asyncHandler(async (req, res) => {
@@ -27,13 +30,13 @@ const authController = {
   }),
 
   logout: asyncHandler(async (req, res) => {
-    const data = await authService.logout(req.body || {});
-    res.status(200).json({ success: true, message: 'Logged out', data });
+    await authService.logout(req.body, req.user);
+    res.status(200).json({ success: true, message: 'Logged out', data: null });
   }),
 
   me: asyncHandler(async (req, res) => {
     const data = await authService.me(req.user);
-    res.status(200).json({ success: true, message: 'Current user', data });
+    res.status(200).json({ success: true, message: 'Session loaded', data });
   }),
 };
 

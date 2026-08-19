@@ -5,26 +5,27 @@ const subscriptionService = require('../services/subscription.service');
 
 function requestMeta(req) {
   return {
+    ip: req.ip || '',
     userAgent: req.get('user-agent') || '',
-    ip: req.ip || req.connection?.remoteAddress || '',
+    platform: 'web',
   };
 }
 
 const subscriptionController = {
   listPlans: asyncHandler(async (_req, res) => {
-    const data = await subscriptionService.listPlans();
+    const plans = await subscriptionService.listPublicPlans();
     res.status(200).json({
       success: true,
-      message: 'Plans',
-      data,
+      message: 'Plans fetched',
+      data: { plans },
     });
   }),
 
   start: asyncHandler(async (req, res) => {
-    const data = await subscriptionService.startSubscription(req.user, req.body || {}, requestMeta(req));
+    const data = await subscriptionService.startSubscription(req.user, req.body, requestMeta(req));
     res.status(201).json({
       success: true,
-      message: 'Trial started',
+      message: 'Subscription started',
       data,
     });
   }),

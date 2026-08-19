@@ -1,9 +1,9 @@
 'use strict';
 
-const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 const HttpError = require('../utils/httpError');
 const { USER_STATUSES } = require('../models/enums');
+const { verifyAccessToken } = require('../utils/token');
 
 async function authenticate(req, _res, next) {
   try {
@@ -13,7 +13,7 @@ async function authenticate(req, _res, next) {
       throw new HttpError(401, 'Login required');
     }
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const payload = verifyAccessToken(token);
     const user = await User.findById(payload.sub);
     if (!user) {
       throw new HttpError(401, 'User not found');
@@ -23,6 +23,11 @@ async function authenticate(req, _res, next) {
     }
 
     req.user = user;
+    req.auth = {
+      id: String(user._id),
+      role: user.role,
+      companyId: user.companyId ? String(user.companyId) : null,
+    };
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
@@ -30,6 +35,14 @@ async function authenticate(req, _res, next) {
     }
     next(error);
   }
+}
+
+function optionalAuthenticate(req, res, next) {
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) {
+    return next();
+  }
+  return authenticate(req, res, next);
 }
 
 function requireRoles(...roles) {
@@ -48,4 +61,4 @@ function requireCompany(req, _res, next) {
   next();
 }
 
-module.exports = { authenticate, requireRoles, requireCompany };
+module.exports = { authenticate, optionalAuthenticate, requireRoles, requireCompany };

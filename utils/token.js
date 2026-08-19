@@ -1,68 +1,38 @@
 'use strict';
 
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const env = require('../config/env');
+const { durationToSeconds } = require('./duration');
 
-function durationToSeconds(value, fallbackSeconds) {
-  if (value == null || value === '') return fallbackSeconds;
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const match = String(value).trim().match(/^(\d+)([smhd])$/i);
-  if (!match) return fallbackSeconds;
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
-  const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
-  return amount * multipliers[unit];
-}
-
-function accessExpiresInSeconds() {
-  return durationToSeconds(process.env.JWT_EXPIRES_IN, 7 * 24 * 60 * 60);
-}
-
-function refreshExpiresInSeconds() {
-  return durationToSeconds(process.env.JWT_REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
-}
-
-function signToken(user) {
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
+function signAccessToken(user) {
   return jwt.sign(
     {
       sub: String(user._id),
       role: user.role,
       companyId: user.companyId ? String(user.companyId) : null,
+      typ: 'access',
     },
-    process.env.JWT_SECRET,
-    { expiresIn }
+    env.jwtSecret,
+    { expiresIn: env.jwtExpiresIn }
   );
 }
 
-function verifyToken(token) {
-  return jwt.verify(token, process.env.JWT_SECRET);
+function verifyAccessToken(token) {
+  const payload = jwt.verify(token, env.jwtSecret);
+  if (payload.typ && payload.typ !== 'access') {
+    throw new jwt.JsonWebTokenError('Invalid token type');
+  }
+  return payload;
 }
 
-function hashRefreshToken(raw) {
-  return crypto.createHash('sha256').update(String(raw)).digest('hex');
-}
-
-function createRefreshTokenValue() {
-  const raw = crypto.randomBytes(48).toString('base64url');
-  return { raw, hash: hashRefreshToken(raw) };
-}
-
-function toTokenResponse(accessToken, refreshToken) {
-  return {
-    accessToken,
-    refreshToken,
-    tokenType: 'Bearer',
-    expiresIn: accessExpiresInSeconds(),
-  };
+function getAccessExpiresInSeconds() {
+  return durationToSeconds(env.jwtExpiresIn, 15 * 60);
 }
 
 module.exports = {
-  signToken,
-  verifyToken,
-  hashRefreshToken,
-  createRefreshTokenValue,
-  accessExpiresInSeconds,
-  refreshExpiresInSeconds,
-  toTokenResponse,
+  signAccessToken,
+  verifyAccessToken,
+  getAccessExpiresInSeconds,
+  signToken: signAccessToken,
+  verifyToken: verifyAccessToken,
 };
