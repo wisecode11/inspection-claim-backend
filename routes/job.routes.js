@@ -23,6 +23,14 @@ router.patch(
   jobController.assign
 );
 
+router.patch(
+  '/:id/location',
+  authenticate,
+  requireRoles(USER_ROLES.COMPANY_ADMIN, USER_ROLES.INSPECTOR),
+  requireCompany,
+  jobController.confirmLocation
+);
+
 router.get('/', authenticate, requireCompany, jobController.list);
 
 module.exports = router;

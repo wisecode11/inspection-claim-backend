@@ -17,7 +17,7 @@ const customerSchema = new Schema(
     secondaryPhone: { type: String, trim: true, maxlength: 30, default: '' },
     mailingAddress: { type: addressSchema, default: () => ({}) },
     notes: { type: String, trim: true, maxlength: 2000, default: '' },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'customers' }
 );
@@ -25,10 +25,11 @@ const customerSchema = new Schema(
 customerSchema.plugin(tenantScopedPlugin);
 customerSchema.plugin(auditFieldsPlugin);
 customerSchema.plugin(softDeletePlugin);
+customerSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 customerSchema.index({ companyId: 1, name: 1 });
 customerSchema.index({ companyId: 1, email: 1 });
 customerSchema.index({ companyId: 1, phone: 1 });
-customerSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+customerSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.Customer || mongoose.model('Customer', customerSchema);

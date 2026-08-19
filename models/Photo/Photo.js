@@ -75,7 +75,7 @@ const photoSchema = new Schema(
     },
     sortOrder: { type: Number, default: 0 },
     includeInReport: { type: Boolean, default: true },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'photos' }
 );
@@ -83,10 +83,11 @@ const photoSchema = new Schema(
 photoSchema.plugin(tenantScopedPlugin);
 photoSchema.plugin(auditFieldsPlugin);
 photoSchema.plugin(softDeletePlugin);
+photoSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 photoSchema.index({ companyId: 1, inspectionId: 1, sortOrder: 1 });
 photoSchema.index({ companyId: 1, subjectType: 1, subjectId: 1 });
 photoSchema.index({ companyId: 1, status: 1 });
-photoSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+photoSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.Photo || mongoose.model('Photo', photoSchema);

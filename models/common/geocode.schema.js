@@ -19,6 +19,8 @@ const geocodeSchema = new Schema(
     longitude: { type: Number, min: -180, max: 180, default: null },
     formattedAddress: { type: String, trim: true, maxlength: 400, default: '' },
     placeId: { type: String, trim: true, default: '' },
+    confirmed: { type: Boolean, default: false },
+    confirmedAt: { type: Date, default: null },
     geocodedAt: { type: Date, default: null },
     error: { type: String, trim: true, maxlength: 500, default: '' },
   },

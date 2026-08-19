@@ -65,7 +65,7 @@ const inspectionSchema = new Schema(
       version: { type: Number, default: 1 },
       lastSyncedAt: { type: Date, default: null },
     },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'inspections' }
 );
@@ -73,9 +73,10 @@ const inspectionSchema = new Schema(
 inspectionSchema.plugin(tenantScopedPlugin);
 inspectionSchema.plugin(auditFieldsPlugin);
 inspectionSchema.plugin(softDeletePlugin);
+inspectionSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 inspectionSchema.index({ companyId: 1, jobId: 1 });
 inspectionSchema.index({ companyId: 1, inspectorId: 1, createdAt: -1 });
-inspectionSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+inspectionSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.Inspection || mongoose.model('Inspection', inspectionSchema);

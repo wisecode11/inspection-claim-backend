@@ -22,7 +22,7 @@ const collateralItemSchema = new Schema(
     damageDescription: { type: String, trim: true, maxlength: 2000, default: '' },
     inspected: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0 },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'collateral_items' }
 );
@@ -30,9 +30,10 @@ const collateralItemSchema = new Schema(
 collateralItemSchema.plugin(tenantScopedPlugin);
 collateralItemSchema.plugin(auditFieldsPlugin);
 collateralItemSchema.plugin(softDeletePlugin);
+collateralItemSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 collateralItemSchema.index({ companyId: 1, inspectionId: 1, type: 1 });
-collateralItemSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+collateralItemSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports =
   mongoose.models.CollateralItem || mongoose.model('CollateralItem', collateralItemSchema);

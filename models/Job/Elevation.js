@@ -29,7 +29,7 @@ const elevationSchema = new Schema(
     inspected: { type: Boolean, default: false },
     inspectedAt: { type: Date, default: null },
     sortOrder: { type: Number, default: 0 },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'elevations' }
 );
@@ -37,8 +37,9 @@ const elevationSchema = new Schema(
 elevationSchema.plugin(tenantScopedPlugin);
 elevationSchema.plugin(auditFieldsPlugin);
 elevationSchema.plugin(softDeletePlugin);
+elevationSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 elevationSchema.index({ companyId: 1, inspectionId: 1, side: 1 });
-elevationSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+elevationSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.Elevation || mongoose.model('Elevation', elevationSchema);

@@ -9,9 +9,11 @@ function errorHandler(err, _req, res, _next) {
   }
 
   if (err.code === 11000) {
+    const keys = err.keyValue ? Object.keys(err.keyValue) : [];
+    const field = keys.filter((key) => key !== 'companyId').join(', ') || 'record';
     return res.status(409).json({
       success: false,
-      message: 'Already exists',
+      message: `Already exists (${field})`,
     });
   }
 

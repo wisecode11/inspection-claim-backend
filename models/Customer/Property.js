@@ -31,7 +31,7 @@ const propertySchema = new Schema(
       pitch: { type: String, trim: true, maxlength: 20, default: '' },
     },
     notes: { type: String, trim: true, maxlength: 2000, default: '' },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'properties' }
 );
@@ -39,11 +39,12 @@ const propertySchema = new Schema(
 propertySchema.plugin(tenantScopedPlugin);
 propertySchema.plugin(auditFieldsPlugin);
 propertySchema.plugin(softDeletePlugin);
+propertySchema.plugin(require('../plugins/clientUuid.plugin'));
 
 propertySchema.index({ companyId: 1, customerId: 1 });
 propertySchema.index({ location: '2dsphere' });
 propertySchema.index({ companyId: 1, 'address.postalCode': 1 });
-propertySchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+propertySchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 propertySchema.virtual('latitude').get(function latitude() {
   return this.geocode && this.geocode.latitude;
@@ -62,6 +63,19 @@ propertySchema.methods.applyGeocode = function applyGeocode({ latitude, longitud
   this.geocode.status = 'success';
   this.geocode.geocodedAt = new Date();
   this.geocode.error = '';
+  this.geocode.confirmed = false;
+  this.geocode.confirmedAt = null;
+  this.location = { type: 'Point', coordinates: [longitude, latitude] };
+  return this;
+};
+
+propertySchema.methods.confirmLocation = function confirmLocation({ latitude, longitude }) {
+  this.geocode.latitude = latitude;
+  this.geocode.longitude = longitude;
+  this.geocode.status = 'success';
+  this.geocode.error = '';
+  this.geocode.confirmed = true;
+  this.geocode.confirmedAt = new Date();
   this.location = { type: 'Point', coordinates: [longitude, latitude] };
   return this;
 };

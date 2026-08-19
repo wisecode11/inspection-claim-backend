@@ -73,7 +73,7 @@ const jobSchema = new Schema(
       lastSyncedAt: { type: Date, default: null },
       lastDeviceId: { type: String, trim: true, default: '' },
     },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'jobs' }
 );
@@ -81,12 +81,13 @@ const jobSchema = new Schema(
 jobSchema.plugin(tenantScopedPlugin);
 jobSchema.plugin(auditFieldsPlugin);
 jobSchema.plugin(softDeletePlugin);
+jobSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 jobSchema.index({ companyId: 1, jobNumber: 1 }, { unique: true });
 jobSchema.index({ companyId: 1, assignedTo: 1, status: 1 });
 jobSchema.index({ companyId: 1, createdAt: -1 });
 jobSchema.index({ companyId: 1, 'claim.status': 1 });
-jobSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+jobSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 jobSchema.index({ location: '2dsphere' });
 
 jobSchema.virtual('latitude').get(function latitude() {
@@ -106,6 +107,19 @@ jobSchema.methods.applyGeocode = function applyGeocode({ latitude, longitude, fo
   this.geocode.status = 'success';
   this.geocode.geocodedAt = new Date();
   this.geocode.error = '';
+  this.geocode.confirmed = false;
+  this.geocode.confirmedAt = null;
+  this.location = { type: 'Point', coordinates: [longitude, latitude] };
+  return this;
+};
+
+jobSchema.methods.confirmLocation = function confirmLocation({ latitude, longitude }) {
+  this.geocode.latitude = latitude;
+  this.geocode.longitude = longitude;
+  this.geocode.status = 'success';
+  this.geocode.error = '';
+  this.geocode.confirmed = true;
+  this.geocode.confirmedAt = new Date();
   this.location = { type: 'Point', coordinates: [longitude, latitude] };
   return this;
 };

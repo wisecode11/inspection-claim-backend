@@ -39,7 +39,7 @@ const testSquareSchema = new Schema(
     hits: { type: [hitSchema], default: [] },
     hitCount: { type: Number, min: 0, default: 0 },
     densityPer100SqFt: { type: Number, min: 0, default: 0 },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'test_squares' }
 );
@@ -47,6 +47,7 @@ const testSquareSchema = new Schema(
 testSquareSchema.plugin(tenantScopedPlugin);
 testSquareSchema.plugin(auditFieldsPlugin);
 testSquareSchema.plugin(softDeletePlugin);
+testSquareSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 testSquareSchema.pre('save', function computeDensity() {
   this.hitCount = Array.isArray(this.hits) ? this.hits.length : 0;
@@ -56,6 +57,6 @@ testSquareSchema.pre('save', function computeDensity() {
 
 testSquareSchema.index({ companyId: 1, elevationId: 1 });
 testSquareSchema.index({ companyId: 1, inspectionId: 1 });
-testSquareSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+testSquareSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.TestSquare || mongoose.model('TestSquare', testSquareSchema);

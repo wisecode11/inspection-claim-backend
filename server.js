@@ -15,6 +15,8 @@ async function connectMongo() {
 async function startServer() {
   await connectMongo();
   require('./models');
+  await require('./utils/repairClientUuidIndexes')(mongoose);
+  console.log('Client uuid indexes repaired');
 
   const app = express();
   app.set('trust proxy', 1);
@@ -32,7 +34,7 @@ async function startServer() {
 
   app.use(require('./middlewares/error.middleware'));
 
-  app.listen(env.port, () => {
+  app.listen(env.port, '0.0.0.0', () => {
     console.log(`Server connected on port ${env.port}`);
   });
 }

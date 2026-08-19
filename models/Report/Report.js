@@ -43,7 +43,7 @@ const reportSchema = new Schema(
       includedSectionKeys: [{ type: String }],
     },
     generatedAt: { type: Date, default: null },
-    clientUuid: { type: String, trim: true, default: '' },
+    clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'reports' }
 );
@@ -51,9 +51,10 @@ const reportSchema = new Schema(
 reportSchema.plugin(tenantScopedPlugin);
 reportSchema.plugin(auditFieldsPlugin);
 reportSchema.plugin(softDeletePlugin);
+reportSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 reportSchema.index({ companyId: 1, jobId: 1, version: -1 });
 reportSchema.index({ companyId: 1, createdAt: -1 });
-reportSchema.index({ companyId: 1, clientUuid: 1 }, { unique: true, sparse: true });
+reportSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 
 module.exports = mongoose.models.Report || mongoose.model('Report', reportSchema);
