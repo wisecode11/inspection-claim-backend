@@ -1,0 +1,22 @@
+{
+  "name": "backend-roofing",
+  "version": "1.0.0",
+  "description": "Multi-tenant SaaS backend for roof inspection and insurance claims",
+  "main": "server.js",
+  "scripts": {
+    "start": "nodemon server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.16.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
