@@ -43,7 +43,7 @@ const tenantSchema = new Schema(
     },
     branding: { type: brandingSchema, default: () => ({}) },
     billing: {
-      stripeCustomerId: { type: String, trim: true, default: '' },
+      stripeCustomerId: { type: String, trim: true, default: undefined },
       email: { type: String, trim: true, lowercase: true, maxlength: 254, default: '' },
     },
     usage: {
@@ -78,7 +78,16 @@ tenantSchema.virtual('hasAccess').get(function hasAccess() {
 
 tenantSchema.index({ status: 1, createdAt: -1 });
 tenantSchema.index({ ownerId: 1 });
-tenantSchema.index({ 'billing.stripeCustomerId': 1 }, { unique: true, sparse: true });
+tenantSchema.index(
+  { 'billing.stripeCustomerId': 1 },
+  {
+    unique: true,
+    name: 'billing.stripeCustomerId_unique',
+    partialFilterExpression: {
+      'billing.stripeCustomerId': { $type: 'string', $gt: '' },
+    },
+  }
+);
 
 tenantSchema.set('toJSON', { virtuals: true });
 tenantSchema.set('toObject', { virtuals: true });

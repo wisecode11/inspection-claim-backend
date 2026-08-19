@@ -26,7 +26,8 @@ async function startServer() {
 
   require('./models');
   await require('./utils/repairClientUuidIndexes')(mongoose);
-  console.log('Client uuid indexes repaired');
+  await require('./utils/repairTenantIndexes')(mongoose);
+  console.log('Client uuid and tenant indexes repaired');
 
   const app = express();
   app.use((req, res, next) => {

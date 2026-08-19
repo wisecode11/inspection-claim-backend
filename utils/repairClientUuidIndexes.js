@@ -12,6 +12,19 @@ const MODEL_NAMES = [
   'Report',
 ];
 
+function isMissingNamespace(error) {
+  return error?.code === 26 || /ns does not exist/i.test(error?.message || '');
+}
+
+async function listIndexes(col) {
+  try {
+    return await col.indexes();
+  } catch (error) {
+    if (isMissingNamespace(error)) return [];
+    throw error;
+  }
+}
+
 async function repairClientUuidIndexes(mongoose) {
   for (const name of MODEL_NAMES) {
     const Model = mongoose.models[name];
@@ -20,14 +33,18 @@ async function repairClientUuidIndexes(mongoose) {
     }
 
     const col = Model.collection;
-    const indexes = await col.indexes();
+    const indexes = await listIndexes(col);
+    if (indexes.length === 0) {
+      continue;
+    }
+
     for (const idx of indexes) {
       const key = idx.key || {};
       const isClientUuidIndex =
         Object.keys(key).length === 2 && key.companyId === 1 && key.clientUuid === 1;
       if (isClientUuidIndex) {
         await col.dropIndex(idx.name).catch((error) => {
-          if (error.code !== 27) {
+          if (error.code !== 27 && !isMissingNamespace(error)) {
             throw error;
           }
         });

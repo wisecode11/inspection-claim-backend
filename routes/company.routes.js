@@ -7,6 +7,9 @@ const companyController = require('../controllers/company.controller');
 
 const router = Router();
 
-router.post('/', authenticate, requireRoles(USER_ROLES.COMPANY_ADMIN), companyController.create);
+router.use(authenticate, requireRoles(USER_ROLES.COMPANY_ADMIN, USER_ROLES.PLATFORM_ADMIN));
+router.get('/', companyController.list);
+router.get('/me', companyController.me);
+router.post('/', requireRoles(USER_ROLES.COMPANY_ADMIN), companyController.create);
 
 module.exports = router;
