@@ -29,6 +29,51 @@ const subscriptionController = {
       data,
     });
   }),
+
+  overview: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.getBillingOverview(req.user);
+    res.status(200).json({
+      success: true,
+      message: 'Billing loaded',
+      data,
+    });
+  }),
+
+  changePlan: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.changePlan(req.user, req.body);
+    res.status(200).json({
+      success: true,
+      message: 'Subscription updated',
+      data,
+    });
+  }),
+
+  cancel: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.cancelSubscription(req.user, req.body);
+    res.status(200).json({
+      success: true,
+      message: 'Subscription cancelled',
+      data,
+    });
+  }),
+
+  invoices: asyncHandler(async (req, res) => {
+    const invoices = await subscriptionService.listInvoices(req.user);
+    res.status(200).json({
+      success: true,
+      message: 'Invoices fetched',
+      data: { invoices },
+    });
+  }),
+
+  paymentMethod: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.updatePaymentMethod(req.user, req.body);
+    res.status(200).json({
+      success: true,
+      message: 'Payment method updated',
+      data,
+    });
+  }),
 };
 
 module.exports = subscriptionController;

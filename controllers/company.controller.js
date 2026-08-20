@@ -21,20 +21,20 @@ const companyController = {
     });
   }),
 
-  listMine: asyncHandler(async (req, res) => {
-    const companies = await companyService.listMyCompanies(req.user);
-    res.status(200).json({
-      success: true,
-      message: 'Organizations fetched',
-      data: { companies },
-    });
-  }),
-
   me: asyncHandler(async (req, res) => {
     const company = await companyService.getMyCompany(req.user);
     res.status(200).json({
       success: true,
       message: 'Organization loaded',
+      data: { company },
+    });
+  }),
+
+  update: asyncHandler(async (req, res) => {
+    const company = await companyService.updateCompany(req.user, req.body);
+    res.status(200).json({
+      success: true,
+      message: 'Organization updated',
       data: { company },
     });
   }),

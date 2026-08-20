@@ -55,6 +55,15 @@ const userSchema = new Schema(
       phone: { type: String, trim: true, maxlength: 30, default: '' },
       avatarUrl: { type: String, trim: true, default: '' },
       licenseNumber: { type: String, trim: true, maxlength: 80, default: '' },
+      certifications: [
+        {
+          name: { type: String, trim: true, maxlength: 160, required: true },
+          issuer: { type: String, trim: true, maxlength: 160, default: '' },
+          number: { type: String, trim: true, maxlength: 80, default: '' },
+          issuedAt: { type: Date, default: null },
+          expiresAt: { type: Date, default: null },
+        },
+      ],
     },
     permissions: [{ type: String, trim: true }],
     lastLoginAt: { type: Date, default: null },

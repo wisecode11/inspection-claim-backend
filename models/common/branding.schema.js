@@ -11,6 +11,9 @@ const brandingSchema = new Schema(
     accentColor: { type: String, trim: true, default: '#FFFFFF' },
     companyDisplayName: { type: String, trim: true, maxlength: 160, default: '' },
     tagline: { type: String, trim: true, maxlength: 200, default: '' },
+    /** Footer text printed on PDF reports and customer emails. */
+    footerText: { type: String, trim: true, maxlength: 500, default: '' },
+    /** @deprecated use footerText */
     letterheadNote: { type: String, trim: true, maxlength: 500, default: '' },
   },
   { _id: false }

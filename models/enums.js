@@ -77,14 +77,38 @@ const JOB_TYPES = Object.freeze({
   CANVASS: 'canvass',
 });
 
+/**
+ * Company admin job workflow:
+ * Assigned → In Progress → Submitted → Reviewed → Complete
+ * Optional: Rejected, Reopened, On Hold
+ * draft = awaiting assignment (unassigned).
+ * Legacy values are normalized in jobStatus utils.
+ */
 const JOB_STATUSES = Object.freeze({
   DRAFT: 'draft',
-  SCHEDULED: 'scheduled',
+  ASSIGNED: 'assigned',
   IN_PROGRESS: 'in_progress',
-  PENDING_SYNC: 'pending_sync',
-  COMPLETED: 'completed',
   SUBMITTED: 'submitted',
+  REVIEWED: 'reviewed',
+  COMPLETED: 'completed',
+  REJECTED: 'rejected',
+  REOPENED: 'reopened',
+  ON_HOLD: 'on_hold',
+  // Legacy (older documents; normalized on read/write)
+  ACCEPTED: 'accepted',
+  REVIEW_REQUIRED: 'review_required',
+  REPORT_GENERATED: 'report_generated',
+  ARCHIVED: 'archived',
   CANCELLED: 'cancelled',
+  SCHEDULED: 'scheduled',
+  PENDING_SYNC: 'pending_sync',
+});
+
+const JOB_PRIORITIES = Object.freeze({
+  LOW: 'low',
+  NORMAL: 'normal',
+  HIGH: 'high',
+  URGENT: 'urgent',
 });
 
 const JOB_SOURCES = Object.freeze({
@@ -204,6 +228,15 @@ const WEATHER_EVENT_TYPES = Object.freeze({
 });
 
 const REPORT_STATUSES = Object.freeze({
+  DRAFT: 'draft',
+  SUBMITTED: 'submitted',
+  UNDER_REVIEW: 'under_review',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+});
+
+/** PDF generation pipeline (separate from review workflow). */
+const REPORT_PDF_STATUSES = Object.freeze({
   QUEUED: 'queued',
   GENERATING: 'generating',
   READY: 'ready',
@@ -278,6 +311,7 @@ module.exports = {
   INVITE_STATUSES,
   JOB_TYPES,
   JOB_STATUSES,
+  JOB_PRIORITIES,
   JOB_SOURCES,
   CLAIM_STATUSES,
   INSPECTION_STATUSES,
@@ -291,6 +325,7 @@ module.exports = {
   WEATHER_MATCH_STATUSES,
   WEATHER_EVENT_TYPES,
   REPORT_STATUSES,
+  REPORT_PDF_STATUSES,
   SHARE_CHANNELS,
   TEMPLATE_SCOPES,
   CHECKLIST_STEP_TYPES,

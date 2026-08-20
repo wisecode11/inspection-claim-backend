@@ -2,8 +2,9 @@
 
 const { User } = require('../models');
 const HttpError = require('../utils/httpError');
-const { USER_STATUSES } = require('../models/enums');
+const { USER_ROLES, USER_STATUSES } = require('../models/enums');
 const { verifyAccessToken } = require('../utils/token');
+const { userHasPermission } = require('../utils/permissions');
 
 async function authenticate(req, _res, next) {
   try {
@@ -61,4 +62,52 @@ function requireCompany(req, _res, next) {
   next();
 }
 
-module.exports = { authenticate, optionalAuthenticate, requireRoles, requireCompany };
+/** Company admin or office staff with an optional permission check. */
+function requireOfficeAccess(...permissions) {
+  return (req, _res, next) => {
+    if (!req.user) {
+      return next(new HttpError(401, 'Login required'));
+    }
+
+    const role = req.user.role;
+    if (role === USER_ROLES.COMPANY_ADMIN) {
+      return next();
+    }
+
+    if (role !== USER_ROLES.OFFICE_STAFF) {
+      return next(new HttpError(403, 'Not allowed for this role'));
+    }
+
+    if (permissions.length === 0) {
+      return next();
+    }
+
+    const missing = permissions.find((permission) => !userHasPermission(req.user, permission));
+    if (missing) {
+      return next(new HttpError(403, `Missing permission: ${missing}`));
+    }
+    return next();
+  };
+}
+
+function requirePermission(...permissions) {
+  return (req, _res, next) => {
+    if (!req.user) {
+      return next(new HttpError(401, 'Login required'));
+    }
+    const missing = permissions.find((permission) => !userHasPermission(req.user, permission));
+    if (missing) {
+      return next(new HttpError(403, `Missing permission: ${missing}`));
+    }
+    next();
+  };
+}
+
+module.exports = {
+  authenticate,
+  optionalAuthenticate,
+  requireRoles,
+  requireCompany,
+  requireOfficeAccess,
+  requirePermission,
+};

@@ -19,6 +19,17 @@ const templateSectionSchema = new Schema(
   { _id: true }
 );
 
+const defaultLanguageSchema = new Schema(
+  {
+    roof_damage: { type: String, trim: true, maxlength: 4000, default: '' },
+    hail_damage: { type: String, trim: true, maxlength: 4000, default: '' },
+    wind_damage: { type: String, trim: true, maxlength: 4000, default: '' },
+    missing_shingles: { type: String, trim: true, maxlength: 4000, default: '' },
+    interior_damage: { type: String, trim: true, maxlength: 4000, default: '' },
+  },
+  { _id: false }
+);
+
 const reportTemplateSchema = new Schema(
   {
     scope: {
@@ -35,6 +46,7 @@ const reportTemplateSchema = new Schema(
     sections: { type: [templateSectionSchema], default: [] },
     definitions: { type: String, trim: true, maxlength: 8000, default: '' },
     legalFooter: { type: String, trim: true, maxlength: 4000, default: '' },
+    defaultLanguage: { type: defaultLanguageSchema, default: () => ({}) },
     codeCitationIds: [{ type: Schema.Types.ObjectId, ref: 'CodeCitation' }],
     includeWeatherPage: { type: Boolean, default: true },
     includeTestSquares: { type: Boolean, default: true },

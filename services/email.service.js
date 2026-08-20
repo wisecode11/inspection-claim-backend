@@ -2,7 +2,7 @@
 
 const nodemailer = require('nodemailer');
 const env = require('../config/env');
-const { inspectorCredentialsEmail } = require('../utils/inspectorCredentials.email');
+const { brandedReportShareEmail, brandedInspectorCredentialsEmail } = require('../utils/brandedEmail');
 
 function createTransport() {
   if (!env.smtpHost) {
@@ -18,17 +18,18 @@ function createTransport() {
   });
 }
 
-function fromHeader() {
+function fromHeader(companyName) {
   const address = env.mailFromAddress || env.smtpUser;
-  if (env.mailFromName) {
-    return `"${env.mailFromName}" <${address}>`;
+  const name = companyName || env.mailFromName;
+  if (name) {
+    return `"${name}" <${address}>`;
   }
   return address;
 }
 
 const transport = createTransport();
 
-async function sendMail({ to, subject, text, html }) {
+async function sendMail({ to, subject, text, html, fromName }) {
   if (!transport) {
     if (env.nodeEnv !== 'production') {
       console.log(`[email skipped] to=${to} subject=${subject}\n${text}`);
@@ -37,7 +38,7 @@ async function sendMail({ to, subject, text, html }) {
   }
 
   await transport.sendMail({
-    from: fromHeader(),
+    from: fromHeader(fromName),
     replyTo: env.mailReplyTo || undefined,
     to,
     subject,
@@ -47,11 +48,46 @@ async function sendMail({ to, subject, text, html }) {
   return { sent: true };
 }
 
-async function sendInspectorCredentials({ to, name, password, companyName }) {
+async function sendInspectorCredentials({ to, name, password, companyName, company }) {
+  const payload = company
+    ? brandedInspectorCredentialsEmail({ to, name, password, company })
+    : require('../utils/inspectorCredentials.email').inspectorCredentialsEmail({
+      to,
+      name,
+      password,
+      companyName,
+    });
+
   return sendMail({
     to,
-    ...inspectorCredentialsEmail({ to, name, password, companyName }),
+    ...payload,
+    fromName: company?.branding?.companyDisplayName || company?.name || companyName,
   });
 }
 
-module.exports = { sendMail, sendInspectorCredentials };
+async function sendBrandedReportShare({
+  to,
+  recipientName,
+  company,
+  reportTitle,
+  jobNumber,
+  pdfUrl,
+  shareUrl,
+}) {
+  const payload = brandedReportShareEmail({
+    to,
+    recipientName,
+    company,
+    reportTitle,
+    jobNumber,
+    pdfUrl,
+    shareUrl,
+  });
+  return sendMail({
+    to,
+    ...payload,
+    fromName: company?.branding?.companyDisplayName || company?.name,
+  });
+}
+
+module.exports = { sendMail, sendInspectorCredentials, sendBrandedReportShare };

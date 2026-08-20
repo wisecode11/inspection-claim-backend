@@ -17,11 +17,12 @@ const weatherService = require('./weather.service');
 const reportService = require('./report.service');
 const checklistService = require('./checklist.service');
 const auditService = require('./audit.service');
+const inviteService = require('./invite.service');
 
 module.exports = {
-    authService,
-    userService,
-    inviteService: require('./invite.service'),
+  authService,
+  userService,
+  inviteService,
   companyService,
   subscriptionService,
   customerService,

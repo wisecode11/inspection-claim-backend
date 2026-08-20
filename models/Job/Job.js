@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const {
   JOB_TYPES,
   JOB_STATUSES,
+  JOB_PRIORITIES,
   JOB_SOURCES,
   CLAIM_STATUSES,
   USER_ROLES,
@@ -28,6 +29,13 @@ const { Schema } = mongoose;
 const jobSchema = new Schema(
   {
     jobNumber: { type: String, required: true, trim: true, maxlength: 40 },
+    title: { type: String, trim: true, maxlength: 200, default: '' },
+    priority: {
+      type: String,
+      enum: Object.values(JOB_PRIORITIES),
+      default: JOB_PRIORITIES.NORMAL,
+      index: true,
+    },
     type: {
       type: String,
       enum: Object.values(JOB_TYPES),
@@ -52,10 +60,17 @@ const jobSchema = new Schema(
     location: { type: geoPointSchema, default: undefined },
     canvassAreaId: { type: Schema.Types.ObjectId, ref: 'CanvassArea', default: null },
     stormEventId: { type: Schema.Types.ObjectId, ref: 'StormEvent', default: null },
+    dueDate: { type: Date, default: null, index: true },
     scheduledAt: { type: Date, default: null },
+    acceptedAt: { type: Date, default: null },
     startedAt: { type: Date, default: null },
-    completedAt: { type: Date, default: null },
+    reviewRequiredAt: { type: Date, default: null },
     submittedAt: { type: Date, default: null },
+    reviewedAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null },
+    reportGeneratedAt: { type: Date, default: null },
+    archivedAt: { type: Date, default: null },
+    cancelledAt: { type: Date, default: null },
     claim: {
       insuranceCompany: { type: String, trim: true, maxlength: 160, default: '' },
       policyNumber: { type: String, trim: true, maxlength: 80, default: '' },
@@ -67,7 +82,23 @@ const jobSchema = new Schema(
         default: CLAIM_STATUSES.NOT_FILED,
       },
     },
+    propertyInfo: {
+      yearBuilt: { type: Number, min: 1800, max: 2100, default: null },
+      stories: { type: Number, min: 1, max: 100, default: null },
+      roofType: { type: String, trim: true, maxlength: 80, default: '' },
+      squareFootage: { type: Number, min: 0, default: null },
+      notes: { type: String, trim: true, maxlength: 2000, default: '' },
+    },
     notes: { type: String, trim: true, maxlength: 4000, default: '' },
+    attachments: [
+      {
+        name: { type: String, trim: true, maxlength: 200, default: '' },
+        url: { type: String, trim: true, maxlength: 1000, default: '' },
+        mimeType: { type: String, trim: true, maxlength: 120, default: '' },
+        size: { type: Number, min: 0, default: 0 },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     sync: {
       version: { type: Number, default: 1 },
       lastSyncedAt: { type: Date, default: null },

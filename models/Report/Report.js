@@ -1,7 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
-const { REPORT_STATUSES } = require('../enums');
+const { REPORT_STATUSES, REPORT_PDF_STATUSES } = require('../enums');
 const brandingSchema = require('../common/branding.schema');
 const storageFileSchema = require('../common/storageFile.schema');
 const tenantScopedPlugin = require('../plugins/tenantScoped.plugin');
@@ -11,8 +11,9 @@ const softDeletePlugin = require('../plugins/softDelete.plugin');
 const { Schema } = mongoose;
 
 /**
- * Generated assessment PDF. Branding + template are snapshotted at generate time
- * so later company edits never rewrite a report already sent to an adjuster.
+ * Inspector assessment report for a job.
+ * Review workflow: draft → submitted → under_review → approved | rejected
+ * (request changes returns to draft). PDF generation is tracked in pdfStatus.
  */
 const reportSchema = new Schema(
   {
@@ -23,11 +24,25 @@ const reportSchema = new Schema(
     status: {
       type: String,
       enum: Object.values(REPORT_STATUSES),
-      default: REPORT_STATUSES.QUEUED,
+      default: REPORT_STATUSES.DRAFT,
+      index: true,
+    },
+    pdfStatus: {
+      type: String,
+      enum: Object.values(REPORT_PDF_STATUSES),
+      default: REPORT_PDF_STATUSES.QUEUED,
       index: true,
     },
     version: { type: Number, min: 1, default: 1 },
     title: { type: String, trim: true, maxlength: 200, default: 'Roof Assessment Report' },
+    narrative: { type: String, trim: true, maxlength: 12000, default: '' },
+    warnings: [{ type: String, trim: true, maxlength: 500 }],
+    reviewNotes: { type: String, trim: true, maxlength: 4000, default: '' },
+    rejectionReason: { type: String, trim: true, maxlength: 2000, default: '' },
+    changesRequested: { type: String, trim: true, maxlength: 2000, default: '' },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    reviewedAt: { type: Date, default: null },
+    submittedAt: { type: Date, default: null },
     pdf: { type: storageFileSchema, default: () => ({}) },
     pageCount: { type: Number, min: 0, default: 0 },
     errorMessage: { type: String, trim: true, maxlength: 1000, default: '' },
@@ -41,6 +56,7 @@ const reportSchema = new Schema(
       inspectedAt: { type: Date, default: null },
       photoIds: [{ type: Schema.Types.ObjectId, ref: 'Photo' }],
       includedSectionKeys: [{ type: String }],
+      notes: { type: String, trim: true, default: '' },
     },
     generatedAt: { type: Date, default: null },
     clientUuid: { type: String, trim: true },
@@ -54,6 +70,7 @@ reportSchema.plugin(softDeletePlugin);
 reportSchema.plugin(require('../plugins/clientUuid.plugin'));
 
 reportSchema.index({ companyId: 1, jobId: 1, version: -1 });
+reportSchema.index({ companyId: 1, status: 1, createdAt: -1 });
 reportSchema.index({ companyId: 1, createdAt: -1 });
 reportSchema.index({ companyId: 1, clientUuid: 1 }, require('../plugins/clientUuid.plugin').clientUuidIndex());
 

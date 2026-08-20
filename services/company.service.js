@@ -23,6 +23,12 @@ async function createCompany(owner, payload, meta = {}) {
   if (owner.companyId) {
     throw new HttpError(409, 'Organization already created for this user');
   }
+
+  const existingOwned = await Tenant.findOne({ ownerId: owner._id });
+  if (existingOwned) {
+    throw new HttpError(409, 'Organization already created for this user');
+  }
+
   if (!payload || !payload.name) {
     throw new HttpError(400, 'Company name is required');
   }
@@ -52,18 +58,70 @@ async function createCompany(owner, payload, meta = {}) {
   };
 }
 
-async function listMyCompanies(user) {
-  if (!user.companyId) return [];
-  const companies = await Tenant.find({
-    $or: [{ _id: user.companyId }, { ownerId: user._id }],
-  }).sort({ name: 1 });
-  return companies.map(toCompanyResponse);
-}
-
 async function getMyCompany(user) {
   if (!user.companyId) return null;
   const company = await Tenant.findById(user.companyId);
   return toCompanyResponse(company);
 }
 
-module.exports = { createCompany, listMyCompanies, getMyCompany };
+async function updateCompany(user, payload = {}) {
+  if (!user.companyId) {
+    throw new HttpError(400, 'Create a company first');
+  }
+
+  const company = await Tenant.findById(user.companyId);
+  if (!company) {
+    throw new HttpError(404, 'Company not found');
+  }
+
+  if (payload.name) {
+    company.name = payload.name;
+    if (!payload.legalName && (!company.legalName || company.legalName === company.name)) {
+      company.legalName = payload.name;
+    }
+  }
+  if (payload.legalName !== undefined) {
+    company.legalName = payload.legalName || company.name;
+  }
+
+  if (payload.contact) {
+    if (payload.contact.email !== undefined) company.contact.email = payload.contact.email;
+    if (payload.contact.phone !== undefined) company.contact.phone = payload.contact.phone;
+    if (payload.contact.website !== undefined) company.contact.website = payload.contact.website;
+    if (payload.contact.address) {
+      company.contact.address = {
+        ...(company.contact.address?.toObject?.() || company.contact.address || {}),
+        ...payload.contact.address,
+      };
+    }
+  }
+
+  if (payload.branding) {
+    if (!company.branding) company.branding = {};
+    const branding = payload.branding;
+    for (const key of [
+      'logoUrl',
+      'logoStorageKey',
+      'primaryColor',
+      'secondaryColor',
+      'accentColor',
+      'companyDisplayName',
+      'tagline',
+      'footerText',
+      'letterheadNote',
+    ]) {
+      if (branding[key] !== undefined) {
+        company.branding[key] = branding[key];
+      }
+    }
+    if (branding.footerText !== undefined && branding.letterheadNote === undefined) {
+      company.branding.letterheadNote = branding.footerText;
+    }
+  }
+
+  company.updatedBy = user._id;
+  await company.save();
+  return toCompanyResponse(company);
+}
+
+module.exports = { createCompany, getMyCompany, updateCompany };

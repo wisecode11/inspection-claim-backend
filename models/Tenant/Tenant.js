@@ -45,6 +45,12 @@ const tenantSchema = new Schema(
     billing: {
       stripeCustomerId: { type: String, trim: true, default: undefined },
       email: { type: String, trim: true, lowercase: true, maxlength: 254, default: '' },
+      paymentMethod: {
+        brand: { type: String, trim: true, maxlength: 40, default: '' },
+        last4: { type: String, trim: true, maxlength: 4, default: '' },
+        expMonth: { type: Number, min: 1, max: 12, default: null },
+        expYear: { type: Number, min: 2000, max: 2100, default: null },
+      },
     },
     usage: {
       seatsUsed: { type: Number, min: 0, default: 0 },
@@ -77,7 +83,15 @@ tenantSchema.virtual('hasAccess').get(function hasAccess() {
 });
 
 tenantSchema.index({ status: 1, createdAt: -1 });
-tenantSchema.index({ ownerId: 1 });
+// One company_admin owns exactly one active (non-deleted) company.
+tenantSchema.index(
+  { ownerId: 1 },
+  {
+    unique: true,
+    name: 'ownerId_unique_active',
+    partialFilterExpression: { deletedAt: null },
+  }
+);
 tenantSchema.index(
   { 'billing.stripeCustomerId': 1 },
   {

@@ -1,6 +1,8 @@
 'use strict';
 
 const HttpError = require('../utils/httpError');
+const { JOB_STATUSES, JOB_PRIORITIES } = require('../models/enums');
+const { normalizeStatus } = require('../utils/jobStatus');
 
 function requiredString(value, field, minLength = 1) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -25,28 +27,238 @@ function optionalString(value, field, maxLength = 4000) {
   return trimmed;
 }
 
-function createJobBody(body = {}) {
-  const customer = body.customer || {};
-  const address = body.address || {};
-  const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
+function optionalNumber(value, field) {
+  if (value === undefined || value === null || value === '') return undefined;
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    throw new HttpError(400, `${field} must be a number`);
+  }
+  return num;
+}
 
+function parsePriority(value, { required = false } = {}) {
+  if (value === undefined || value === null || value === '') {
+    if (required) throw new HttpError(400, 'Priority is required');
+    return JOB_PRIORITIES.NORMAL;
+  }
+  const priority = String(value).trim().toLowerCase();
+  if (!Object.values(JOB_PRIORITIES).includes(priority)) {
+    throw new HttpError(400, 'Invalid priority');
+  }
+  return priority;
+}
+
+function parseAttachments(list) {
+  if (list === undefined) return undefined;
+  if (!Array.isArray(list)) {
+    throw new HttpError(400, 'Attachments must be an array');
+  }
+  return list.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      throw new HttpError(400, `Attachment ${index + 1} is invalid`);
+    }
+    return {
+      name: requiredString(item.name, `Attachment ${index + 1} name`),
+      url: requiredString(item.url, `Attachment ${index + 1} url`),
+      mimeType: optionalString(item.mimeType, 'Mime type', 120),
+      size: optionalNumber(item.size, 'Attachment size') || 0,
+      uploadedAt: item.uploadedAt ? new Date(item.uploadedAt) : new Date(),
+    };
+  });
+}
+
+function parseClaim(claim = {}, { required = false } = {}) {
+  if (required) {
+    return {
+      insuranceCompany: requiredString(claim.insuranceCompany || claim.carrierName, 'Carrier name', 2),
+      policyNumber: requiredString(claim.policyNumber, 'Policy number'),
+      claimNumber: requiredString(claim.claimNumber, 'Claim number'),
+      dateOfLoss: claim.dateOfLoss || null,
+      status: claim.status || undefined,
+    };
+  }
   return {
-    customer: {
-      name: requiredString(customer.name, 'Customer name'),
-      email: optionalString(customer.email, 'Customer email', 254),
-      phone: optionalString(customer.phone, 'Customer phone', 30),
-    },
-    address: {
-      line1: requiredString(address.line1 || address.street, 'Street address'),
+    insuranceCompany: optionalString(claim.insuranceCompany || claim.carrierName, 'Carrier name', 160),
+    policyNumber: optionalString(claim.policyNumber, 'Policy number', 80),
+    claimNumber: optionalString(claim.claimNumber, 'Claim number', 80),
+    dateOfLoss: claim.dateOfLoss || null,
+    status: claim.status || undefined,
+  };
+}
+
+function parsePropertyInfo(info = {}) {
+  return {
+    yearBuilt: optionalNumber(info.yearBuilt, 'Year built'),
+    stories: optionalNumber(info.stories, 'Stories'),
+    roofType: optionalString(info.roofType, 'Roof type', 80),
+    squareFootage: optionalNumber(info.squareFootage, 'Square footage'),
+    notes: optionalString(info.notes, 'Property notes', 2000),
+  };
+}
+
+function parseCustomer(customer = {}, { requireAll = true } = {}) {
+  if (requireAll) {
+    return {
+      name: requiredString(customer.name, 'Homeowner name'),
+      email: requiredString(customer.email, 'Homeowner email').toLowerCase(),
+      phone: requiredString(customer.phone, 'Homeowner phone'),
+    };
+  }
+  return {
+    name: optionalString(customer.name, 'Homeowner name', 160) || undefined,
+    email: optionalString(customer.email, 'Customer email', 254),
+    phone: optionalString(customer.phone, 'Customer phone', 30),
+  };
+}
+
+function parseAddress(address = {}, { required = true } = {}) {
+  const line1Raw = address.line1 || address.street;
+  if (required) {
+    return {
+      line1: requiredString(line1Raw, 'Property address'),
       line2: optionalString(address.line2, 'Address line 2', 120),
       city: requiredString(address.city, 'City'),
-      state: optionalString(address.state, 'State', 80),
-      postalCode: optionalString(address.postalCode || address.zip, 'Postal code', 20),
+      state: requiredString(address.state, 'State'),
+      postalCode: requiredString(address.postalCode || address.zip, 'Zip code'),
       country: optionalString(address.country, 'Country', 8) || 'US',
-    },
+    };
+  }
+  return {
+    line1: optionalString(line1Raw, 'Property address', 200),
+    line2: optionalString(address.line2, 'Address line 2', 120),
+    city: optionalString(address.city, 'City', 80),
+    state: optionalString(address.state, 'State', 80),
+    postalCode: optionalString(address.postalCode || address.zip, 'Zip code', 20),
+    country: optionalString(address.country, 'Country', 8),
+  };
+}
+
+function createJobBody(body = {}) {
+  const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
+  const claim = parseClaim(body.claim || {}, { required: true });
+  if (!claim.dateOfLoss) {
+    throw new HttpError(400, 'Date of loss is required');
+  }
+
+  return {
+    title: requiredString(body.title || body.jobTitle, 'Job title'),
+    priority: parsePriority(body.priority),
+    dueDate: body.dueDate || null,
+    customer: parseCustomer(body.customer || {}, { requireAll: true }),
+    address: parseAddress(body.address || {}, { required: true }),
+    claim,
+    propertyInfo: parsePropertyInfo(body.propertyInfo || {}),
     notes: optionalString(body.notes, 'Notes'),
+    attachments: parseAttachments(body.attachments) || [],
     inspectorId,
   };
 }
 
-module.exports = { createJobBody };
+function updateJobBody(body = {}) {
+  const result = {};
+
+  if (body.title !== undefined || body.jobTitle !== undefined) {
+    result.title = requiredString(body.title || body.jobTitle, 'Job title');
+  }
+  if (body.priority !== undefined) {
+    result.priority = parsePriority(body.priority, { required: true });
+  }
+  if (body.dueDate !== undefined) {
+    result.dueDate = body.dueDate || null;
+  }
+  if (body.customer) {
+    result.customer = parseCustomer(body.customer, { requireAll: false });
+  }
+  if (body.address) {
+    result.address = parseAddress(body.address, { required: false });
+  }
+  if (body.claim) {
+    result.claim = parseClaim(body.claim, { required: false });
+  }
+  if (body.propertyInfo) {
+    result.propertyInfo = parsePropertyInfo(body.propertyInfo);
+  }
+  if (body.notes !== undefined) {
+    result.notes = optionalString(body.notes, 'Notes');
+  }
+  if (body.attachments !== undefined) {
+    result.attachments = parseAttachments(body.attachments) || [];
+  }
+  if (body.inspectorId !== undefined) {
+    if (body.inspectorId === null || body.inspectorId === '') {
+      result.unassign = true;
+      result.inspectorId = null;
+    } else if (typeof body.inspectorId === 'string') {
+      result.inspectorId = body.inspectorId.trim();
+    } else {
+      throw new HttpError(400, 'inspectorId must be a string');
+    }
+  }
+
+  return result;
+}
+
+function assignJobBody(body = {}) {
+  const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
+  if (!inspectorId) {
+    throw new HttpError(400, 'inspectorId is required');
+  }
+  const result = { inspectorId };
+  if (body.dueDate !== undefined) result.dueDate = body.dueDate || null;
+  if (body.priority !== undefined) result.priority = parsePriority(body.priority);
+  return result;
+}
+
+function bulkAssignBody(body = {}) {
+  if (!Array.isArray(body.jobIds) || !body.jobIds.length) {
+    throw new HttpError(400, 'jobIds are required');
+  }
+  const jobIds = body.jobIds.map((id) => String(id).trim()).filter(Boolean);
+  if (!jobIds.length) {
+    throw new HttpError(400, 'jobIds are required');
+  }
+  const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
+  if (!inspectorId) {
+    throw new HttpError(400, 'inspectorId is required');
+  }
+  const result = { jobIds, inspectorId };
+  if (body.dueDate !== undefined) result.dueDate = body.dueDate || null;
+  if (body.priority !== undefined) result.priority = parsePriority(body.priority);
+  return result;
+}
+
+const PRODUCT_STATUSES = new Set([
+  JOB_STATUSES.DRAFT,
+  JOB_STATUSES.ASSIGNED,
+  JOB_STATUSES.IN_PROGRESS,
+  JOB_STATUSES.SUBMITTED,
+  JOB_STATUSES.REVIEWED,
+  JOB_STATUSES.COMPLETED,
+  JOB_STATUSES.REJECTED,
+  JOB_STATUSES.REOPENED,
+  JOB_STATUSES.ON_HOLD,
+]);
+
+function statusBody(body = {}) {
+  const raw = String(body.status || '').trim();
+  const status = normalizeStatus(raw);
+  if (!PRODUCT_STATUSES.has(status) && !Object.values(JOB_STATUSES).includes(raw)) {
+    throw new HttpError(400, 'Invalid job status');
+  }
+  return { status };
+}
+
+function cancelJobBody(body = {}) {
+  return {
+    reason: optionalString(body.reason, 'Cancel reason', 500),
+  };
+}
+
+module.exports = {
+  createJobBody,
+  updateJobBody,
+  assignJobBody,
+  bulkAssignBody,
+  statusBody,
+  cancelJobBody,
+};
