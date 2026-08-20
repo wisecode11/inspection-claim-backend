@@ -36,6 +36,31 @@ function optionalNumber(value, field) {
   return num;
 }
 
+function parseDateOfLoss(value) {
+  const raw = value == null ? '' : String(value).trim();
+  if (!raw) {
+    throw new HttpError(400, 'Date of loss is required');
+  }
+
+  const isoDay = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = isoDay
+    ? new Date(Date.UTC(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3])))
+    : new Date(raw);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, 'Date of loss must be a valid date (YYYY-MM-DD)');
+  }
+
+  const tomorrow = new Date();
+  tomorrow.setUTCHours(23, 59, 59, 999);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  if (date > tomorrow) {
+    throw new HttpError(400, 'Date of loss cannot be in the future');
+  }
+
+  return date;
+}
+
 function parsePriority(value, { required = false } = {}) {
   if (value === undefined || value === null || value === '') {
     if (required) throw new HttpError(400, 'Priority is required');
@@ -121,6 +146,7 @@ function parseAddress(address = {}, { required = true } = {}) {
       state: requiredString(address.state, 'State'),
       postalCode: requiredString(address.postalCode || address.zip, 'Zip code'),
       country: optionalString(address.country, 'Country', 8) || 'US',
+      formatted: optionalString(address.formatted, 'Formatted address', 300),
     };
   }
   return {
@@ -130,15 +156,15 @@ function parseAddress(address = {}, { required = true } = {}) {
     state: optionalString(address.state, 'State', 80),
     postalCode: optionalString(address.postalCode || address.zip, 'Zip code', 20),
     country: optionalString(address.country, 'Country', 8),
+    formatted: optionalString(address.formatted, 'Formatted address', 300),
   };
 }
 
 function createJobBody(body = {}) {
   const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
   const claim = parseClaim(body.claim || {}, { required: true });
-  if (!claim.dateOfLoss) {
-    throw new HttpError(400, 'Date of loss is required');
-  }
+  const dateOfLoss = parseDateOfLoss(body.dateOfLoss || claim.dateOfLoss);
+  claim.dateOfLoss = dateOfLoss;
 
   return {
     title: requiredString(body.title || body.jobTitle, 'Job title'),
@@ -151,6 +177,7 @@ function createJobBody(body = {}) {
     notes: optionalString(body.notes, 'Notes'),
     attachments: parseAttachments(body.attachments) || [],
     inspectorId,
+    dateOfLoss,
   };
 }
 
@@ -254,6 +281,16 @@ function cancelJobBody(body = {}) {
   };
 }
 
+function verifyWeatherBody(body = {}) {
+  if (!body.jobId || typeof body.jobId !== 'string' || !body.jobId.trim()) {
+    throw new HttpError(400, 'jobId is required');
+  }
+  return {
+    jobId: body.jobId.trim(),
+    force: Boolean(body.force),
+  };
+}
+
 module.exports = {
   createJobBody,
   updateJobBody,
@@ -261,4 +298,6 @@ module.exports = {
   bulkAssignBody,
   statusBody,
   cancelJobBody,
+  verifyWeatherBody,
+  parseDateOfLoss,
 };

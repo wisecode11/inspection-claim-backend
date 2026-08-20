@@ -156,6 +156,14 @@ function toJobResponse(job, extras = {}) {
     cancelledAt: doc.cancelledAt || null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
+    dateOfLoss: doc.claim?.dateOfLoss || null,
+    claim: {
+      insuranceCompany: doc.claim?.insuranceCompany || '',
+      policyNumber: doc.claim?.policyNumber || '',
+      claimNumber: doc.claim?.claimNumber || '',
+      dateOfLoss: doc.claim?.dateOfLoss || null,
+      status: doc.claim?.status || '',
+    },
     geocode,
     latitude: geocode.latitude,
     longitude: geocode.longitude,
@@ -234,7 +242,13 @@ async function createJob(owner, payload) {
 
   const address = normalizeAddress(payload.address);
   const companyId = owner.companyId;
-  const claim = buildClaim(payload.claim || {});
+  const claim = buildClaim({
+    ...(payload.claim || {}),
+    dateOfLoss: payload.dateOfLoss || payload.claim?.dateOfLoss,
+  });
+  if (!claim.dateOfLoss) {
+    throw new HttpError(400, 'Date of loss is required');
+  }
   const propertyInfo = buildPropertyInfo(payload.propertyInfo || {});
 
   const customer = await Customer.create({
