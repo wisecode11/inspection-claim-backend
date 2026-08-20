@@ -2,16 +2,27 @@
 
 const HttpError = require('../utils/httpError');
 
-function requiredString(value, field) {
+function requiredString(value, field, minLength = 1) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new HttpError(400, `${field} is required`);
   }
-  return value.trim();
+  const trimmed = value.trim();
+  if (trimmed.length < minLength) {
+    throw new HttpError(400, `${field} must be at least ${minLength} characters`);
+  }
+  return trimmed;
 }
 
-function optionalString(value) {
-  if (value == null || value === '') return '';
-  return String(value).trim();
+function optionalString(value, field, maxLength = 4000) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value !== 'string') {
+    throw new HttpError(400, `${field} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new HttpError(400, `${field} is too long`);
+  }
+  return trimmed;
 }
 
 function parseDateOfLoss(value) {
@@ -43,30 +54,25 @@ function createJobBody(body = {}) {
   const customer = body.customer || {};
   const address = body.address || {};
   const claim = body.claim || {};
-
-  if (!customer.name || !String(customer.name).trim()) {
-    throw new HttpError(400, 'Customer name is required');
-  }
-  if (!(address.line1 || address.street)) {
-    throw new HttpError(400, 'Job address is required');
-  }
+  const inspectorId = typeof body.inspectorId === 'string' ? body.inspectorId.trim() : '';
 
   return {
     customer: {
       name: requiredString(customer.name, 'Customer name'),
-      email: optionalString(customer.email),
-      phone: optionalString(customer.phone),
+      email: optionalString(customer.email, 'Customer email', 254),
+      phone: optionalString(customer.phone, 'Customer phone', 30),
     },
     address: {
-      line1: optionalString(address.line1 || address.street),
-      line2: optionalString(address.line2),
-      city: optionalString(address.city),
-      state: optionalString(address.state),
-      postalCode: optionalString(address.postalCode || address.zip),
-      country: optionalString(address.country),
-      formatted: optionalString(address.formatted),
+      line1: requiredString(address.line1 || address.street, 'Street address'),
+      line2: optionalString(address.line2, 'Address line 2', 120),
+      city: requiredString(address.city, 'City'),
+      state: optionalString(address.state, 'State', 80),
+      postalCode: optionalString(address.postalCode || address.zip, 'Postal code', 20),
+      country: optionalString(address.country, 'Country', 8) || 'US',
+      formatted: optionalString(address.formatted, 'Formatted address', 300),
     },
-    notes: optionalString(body.notes),
+    notes: optionalString(body.notes, 'Notes'),
+    inspectorId,
     dateOfLoss: parseDateOfLoss(body.dateOfLoss || claim.dateOfLoss),
   };
 }

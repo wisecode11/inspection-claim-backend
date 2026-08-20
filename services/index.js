@@ -19,8 +19,9 @@ const checklistService = require('./checklist.service');
 const auditService = require('./audit.service');
 
 module.exports = {
-  authService,
-  userService,
+    authService,
+    userService,
+    inviteService: require('./invite.service'),
   companyService,
   subscriptionService,
   customerService,
