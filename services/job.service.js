@@ -5,6 +5,7 @@ const { Customer, Property, Job, User } = require('../models');
 const { USER_ROLES, JOB_STATUSES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
 const geocodeService = require('./geocode.service');
+const weatherService = require('./weather.service');
 
 function normalizeAddress(address = {}) {
   const normalized = {
@@ -55,6 +56,12 @@ function toJobResponse(job) {
     notes: doc.notes,
     scheduledAt: doc.scheduledAt || null,
     createdAt: doc.createdAt,
+    dateOfLoss: doc.claim?.dateOfLoss || null,
+    claim: {
+      dateOfLoss: doc.claim?.dateOfLoss || null,
+      claimNumber: doc.claim?.claimNumber || '',
+      status: doc.claim?.status || '',
+    },
     geocode,
     latitude: geocode.latitude,
     longitude: geocode.longitude,
@@ -85,6 +92,9 @@ async function createJob(owner, payload) {
   if (!payload.address || !(payload.address.line1 || payload.address.street)) {
     throw new HttpError(400, 'Job address is required');
   }
+  if (!payload.dateOfLoss) {
+    throw new HttpError(400, 'Date of loss is required');
+  }
 
   const address = normalizeAddress(payload.address);
   const companyId = owner.companyId;
@@ -113,6 +123,9 @@ async function createJob(owner, payload) {
     propertyId: property._id,
     address,
     notes: payload.notes || '',
+    claim: {
+      dateOfLoss: payload.dateOfLoss,
+    },
     createdBy: owner._id,
   });
 
@@ -139,7 +152,13 @@ async function createJob(owner, payload) {
     throw new HttpError(409, 'Could not assign a unique job number. Try again.');
   }
 
-  return toJobResponse(created);
+  const response = toJobResponse(created);
+  try {
+    response.weather = await weatherService.verifyForJob(owner, created._id);
+  } catch {
+    response.weather = null;
+  }
+  return response;
 }
 
 async function assignJob(owner, jobId, inspectorId) {

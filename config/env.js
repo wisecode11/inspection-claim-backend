@@ -20,4 +20,7 @@ module.exports = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   platformAdminEmail: process.env.PLATFORM_ADMIN_EMAIL || 'jordan@roofclaim.io',
   platformAdminPassword: process.env.PLATFORM_ADMIN_PASSWORD || 'password',
+  weatherProvider: process.env.WEATHER_PROVIDER || 'open_meteo',
+  weatherWindowDays: Number(process.env.WEATHER_WINDOW_DAYS) || 1,
+  weatherCacheTtlHours: Number(process.env.WEATHER_CACHE_TTL_HOURS) || 24,
 };
