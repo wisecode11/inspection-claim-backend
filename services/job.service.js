@@ -2,7 +2,7 @@
 
 const mongoose = require('mongoose');
 const { Customer, Property, Job, User } = require('../models');
-const { USER_ROLES, JOB_STATUSES } = require('../models/enums');
+const { USER_ROLES, USER_STATUSES, JOB_STATUSES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
 const geocodeService = require('./geocode.service');
 
@@ -41,17 +41,35 @@ function toGeocodeResponse(geocode = {}) {
   };
 }
 
+function inspectorLabel(assignedTo) {
+  if (!assignedTo) return 'Unassigned';
+  if (typeof assignedTo === 'object') {
+    const name = `${assignedTo.profile?.firstName || ''} ${assignedTo.profile?.lastName || ''}`.trim();
+    return name || assignedTo.email || 'Inspector';
+  }
+  return 'Assigned';
+}
+
 function toJobResponse(job) {
   const doc = typeof job.toObject === 'function' ? job.toObject({ virtuals: true }) : job;
   const geocode = toGeocodeResponse(doc.geocode);
+  const assigned = doc.assignedTo && typeof doc.assignedTo === 'object' ? doc.assignedTo : null;
+  const address = doc.address || {};
+  const customer = doc.customerId && typeof doc.customerId === 'object' ? doc.customerId : null;
   return {
     id: String(doc._id),
     jobNumber: doc.jobNumber,
     status: doc.status,
     type: doc.type,
-    assignedTo: doc.assignedTo || null,
-    customer: doc.customerId || null,
-    address: doc.address,
+    assignedTo: assigned ? String(assigned._id) : (doc.assignedTo ? String(doc.assignedTo) : null),
+    inspector: inspectorLabel(doc.assignedTo),
+    customer: customer
+      ? { id: String(customer._id), name: customer.name || '', email: customer.email || '', phone: customer.phone || '' }
+      : doc.customerId || null,
+    customerName: customer?.name || '',
+    address,
+    addressLine: address.formatted || address.line1 || '',
+    city: [address.city, address.state].filter(Boolean).join(', '),
     notes: doc.notes,
     scheduledAt: doc.scheduledAt || null,
     createdAt: doc.createdAt,
@@ -139,6 +157,10 @@ async function createJob(owner, payload) {
     throw new HttpError(409, 'Could not assign a unique job number. Try again.');
   }
 
+  if (payload.inspectorId) {
+    return assignJob(owner, created._id, payload.inspectorId);
+  }
+
   return toJobResponse(created);
 }
 
@@ -164,6 +186,9 @@ async function assignJob(owner, jobId, inspectorId) {
       404,
       'Inspector not found in this company. Use data.inspector.id from Inspector create, not customer id'
     );
+  }
+  if (inspector.status !== USER_STATUSES.ACTIVE) {
+    throw new HttpError(400, 'Inspector is not active');
   }
 
   const job = await Job.findOne({ _id: jobId, companyId: owner.companyId });

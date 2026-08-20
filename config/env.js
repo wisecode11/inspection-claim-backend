@@ -20,4 +20,11 @@ module.exports = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   platformAdminEmail: process.env.PLATFORM_ADMIN_EMAIL || 'jordan@roofclaim.io',
   platformAdminPassword: process.env.PLATFORM_ADMIN_PASSWORD || 'password',
+  smtpHost: process.env.SMTP_HOST || '',
+  smtpPort: Number(process.env.SMTP_PORT) || 587,
+  smtpUser: process.env.SMTP_USER || '',
+  smtpPass: (process.env.SMTP_PASS || '').replace(/\s+/g, ''),
+  mailFromName: process.env.EMAIL_FROM_NAME || 'RoofClaim',
+  mailFromAddress: process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || '',
+  mailReplyTo: process.env.EMAIL_REPLY_TO || '',
 };
