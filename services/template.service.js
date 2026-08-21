@@ -22,23 +22,36 @@ function slugKey(value, fallback = 'section') {
   return base || fallback;
 }
 
+const DEFAULT_LEGAL_FOOTER =
+  'This report reflects conditions observed at the time of inspection and is not a coverage determination.';
+
 function defaultSections() {
   const titles = [
-    'Cover & property details',
-    'Weather verification',
-    'Photo evidence log',
-    'Damage findings',
-    'Test-square results',
-    'Code citations',
-    'Adjuster notes',
-    'Recommendation & next steps',
+    'Property / Cover',
+    'Assessment Summary',
+    'Damage Definitions & Assessment Criteria',
+    'Hail Report / Weather Data',
+    'Elevations',
+    'Collateral Damage',
+    'Spatter',
+    'Hail Impacts — Metal',
+    'Hail Impacts — Shingles',
+    'Test Squares',
+    'Wear & Tear',
+    'Roof Tie-Ins',
+    'Roof Overviews',
+    'Build Notes',
+    'Existing Conditions',
+    'Codes and Standards',
+    "Inspector's Declaration",
   ];
+
   return titles.map((title, index) => ({
     key: slugKey(title, `section_${index + 1}`),
     title,
-    include: title !== 'Adjuster notes',
+    include: true,
     sortOrder: index,
-    body: '',
+    body: title === 'Existing Conditions' ? 'Estimated roof age: [ROOF AGE] years.' : '',
   }));
 }
 
@@ -151,15 +164,14 @@ async function ensureDefaultTemplate(user) {
   const created = await ReportTemplate.create({
     scope: TEMPLATE_SCOPES.TENANT,
     companyId: user.companyId,
-    name: 'Company report template',
-    description: 'Company-wide report defaults',
+    name: 'PDF report',
+    description: '',
     version: 1,
     isDefault: true,
     isActive: true,
     sections: defaultSections(),
     definitions: '',
-    legalFooter:
-      'This report reflects conditions observed at the time of inspection and does not guarantee future performance of the roofing system.',
+    legalFooter: DEFAULT_LEGAL_FOOTER,
     defaultLanguage: { ...EMPTY_LANGUAGE },
     codeCitationIds: [],
     createdBy: user._id,
