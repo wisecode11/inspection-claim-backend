@@ -154,8 +154,21 @@ async function findCompanyReport(actor, reportId) {
 
 async function listReports(actor, query = {}) {
   const filter = { companyId: actor.companyId };
+  // Company admin review queue: only inspector-submitted (and later) reports.
+  // Drafts are in-progress inspector work and must not appear for approve/reject.
+  const reviewStatuses = [
+    REPORT_STATUSES.SUBMITTED,
+    REPORT_STATUSES.UNDER_REVIEW,
+    REPORT_STATUSES.APPROVED,
+    REPORT_STATUSES.REJECTED,
+  ];
   if (query.status) {
+    if (!reviewStatuses.includes(query.status)) {
+      return [];
+    }
     filter.status = query.status;
+  } else {
+    filter.status = { $in: reviewStatuses };
   }
 
   const reports = await Report.find(filter)

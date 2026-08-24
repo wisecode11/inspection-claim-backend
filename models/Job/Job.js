@@ -93,7 +93,8 @@ const jobSchema = new Schema(
     attachments: [
       {
         name: { type: String, trim: true, maxlength: 200, default: '' },
-        url: { type: String, trim: true, maxlength: 1000, default: '' },
+        // Data URLs from in-app file upload (same pattern as branding logos).
+        url: { type: String, trim: true, maxlength: 2_500_000, default: '' },
         mimeType: { type: String, trim: true, maxlength: 120, default: '' },
         size: { type: Number, min: 0, default: 0 },
         uploadedAt: { type: Date, default: Date.now },
