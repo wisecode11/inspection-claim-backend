@@ -68,6 +68,19 @@ function loginBody(body) {
   };
 }
 
+function googleAuthBody(body) {
+  const mode = optionalString(body.mode, 'Mode', 20) || 'login';
+  if (mode !== 'login' && mode !== 'signup') {
+    throw new HttpError(400, 'Mode must be login or signup');
+  }
+  return {
+    idToken: requiredString(body.idToken, 'Google token'),
+    mode,
+    deviceId: optionalString(body.deviceId, 'Device id', 120),
+    platform: parsePlatform(body.platform),
+  };
+}
+
 function refreshBody(body) {
   return {
     refreshToken: requiredString(body.refreshToken, 'Refresh token'),
@@ -85,6 +98,7 @@ function logoutBody(body) {
 module.exports = {
   registerBody,
   loginBody,
+  googleAuthBody,
   refreshBody,
   logoutBody,
 };

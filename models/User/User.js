@@ -32,10 +32,17 @@ const userSchema = new Schema(
       type: String,
       select: false,
       required() {
+        if (this.googleId) return false;
         if (this.status === USER_STATUSES.INVITED) return false;
         if (this.status === USER_STATUSES.PENDING_SETUP) return true;
         return this.status === USER_STATUSES.ACTIVE;
       },
+    },
+    googleId: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
     },
     role: {
       type: String,

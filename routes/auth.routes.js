@@ -7,6 +7,7 @@ const { validateBody } = require('../middlewares/validate.middleware');
 const {
   registerBody,
   loginBody,
+  googleAuthBody,
   refreshBody,
   logoutBody,
 } = require('../validators/auth.validator');
@@ -15,6 +16,7 @@ const router = Router();
 
 router.post('/register', validateBody(registerBody), authController.register);
 router.post('/login', validateBody(loginBody), authController.login);
+router.post('/google', validateBody(googleAuthBody), authController.googleAuth);
 router.post('/refresh', validateBody(refreshBody), authController.refresh);
 router.post('/logout', optionalAuthenticate, validateBody(logoutBody), authController.logout);
 router.get('/me', authenticate, authController.me);

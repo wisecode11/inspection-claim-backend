@@ -24,6 +24,20 @@ const authController = {
     res.status(200).json({ success: true, message: 'Login successful', data });
   }),
 
+  googleAuth: asyncHandler(async (req, res) => {
+    const data = await authService.googleAuth(req.body, {
+      ...requestMeta(req),
+      platform: req.body.platform || 'web',
+    });
+    const created = Boolean(data.created);
+    if (data.created !== undefined) delete data.created;
+    res.status(created ? 201 : 200).json({
+      success: true,
+      message: created ? 'Account created' : 'Login successful',
+      data,
+    });
+  }),
+
   refresh: asyncHandler(async (req, res) => {
     const data = await authService.refresh(req.body, requestMeta(req));
     res.status(200).json({ success: true, message: 'Token refreshed', data });
