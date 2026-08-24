@@ -82,9 +82,13 @@ function parseAttachments(list) {
     if (!item || typeof item !== 'object') {
       throw new HttpError(400, `Attachment ${index + 1} is invalid`);
     }
+    const url = optionalString(item.url, `Attachment ${index + 1} file`, 2_500_000);
+    if (!url) {
+      throw new HttpError(400, `Attachment ${index + 1} file is required`);
+    }
     return {
       name: requiredString(item.name, `Attachment ${index + 1} name`),
-      url: requiredString(item.url, `Attachment ${index + 1} url`),
+      url,
       mimeType: optionalString(item.mimeType, 'Mime type', 120),
       size: optionalNumber(item.size, 'Attachment size') || 0,
       uploadedAt: item.uploadedAt ? new Date(item.uploadedAt) : new Date(),

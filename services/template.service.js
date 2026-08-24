@@ -25,10 +25,24 @@ function slugKey(value, fallback = 'section') {
 const DEFAULT_LEGAL_FOOTER =
   'This report reflects conditions observed at the time of inspection and is not a coverage determination.';
 
+/** Admin-editable narrative slots (v4). Photo sections stay fixed — filled by inspector tags. */
+const DEFAULT_SECTION_BODIES = {
+  'Summary of Findings':
+    'Summary of Findings documents objective evidence gathered after wind or hail events to demonstrate conditions observed at the time of inspection. Photo sections below are organized by capture category and damage tags applied in the field.',
+  'Investigation Process':
+    'Visual inspection of slopes and elevations; collateral damage documentation; weather / third-party data review; property-owner interview when available; material and repairability assessment; documentation of pre-existing conditions and applicable code considerations.',
+  'Damage Definitions & Assessment Criteria':
+    'Physical damage is a distinct and demonstrable physical alteration of a building component. Functional damage determination is guided by HAAG Engineering standards and related industry practice. Functional damage compromises serviceability, structural integrity, or waterproofing. Cosmetic damage affects appearance without impairing material function.',
+  'Existing Conditions':
+    'The estimated roof age is [ROOF AGE]. Age-related wear and other pre-existing conditions may increase vulnerability to storm forces, but are not identified in this package as the cause of the storm-related damage that was observed and photographed during this inspection.',
+};
+
 function defaultSections() {
   const titles = [
     'Property / Cover',
     'Assessment Summary',
+    'Summary of Findings',
+    'Investigation Process',
     'Damage Definitions & Assessment Criteria',
     'Hail Report / Weather Data',
     'Elevations',
@@ -51,7 +65,7 @@ function defaultSections() {
     title,
     include: true,
     sortOrder: index,
-    body: title === 'Existing Conditions' ? 'Estimated roof age: [ROOF AGE] years.' : '',
+    body: DEFAULT_SECTION_BODIES[title] || '',
   }));
 }
 
