@@ -15,6 +15,7 @@ async function getClient() {
     );
   }
   return clientPromise;
+  
 }
 
 async function verifyIdToken(idToken) {

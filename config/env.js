@@ -30,4 +30,8 @@ module.exports = {
   mailFromName: process.env.EMAIL_FROM_NAME || 'RoofClaim',
   mailFromAddress: process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.SMTP_USER || '',
   mailReplyTo: process.env.EMAIL_REPLY_TO || '',
+  googleClientIds: String(process.env.GOOGLE_CLIENT_IDS || process.env.GOOGLE_CLIENT_ID || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
 };
