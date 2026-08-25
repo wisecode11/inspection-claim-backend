@@ -22,6 +22,14 @@ async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
   app.use(cors(corsOptions));
+
+  // Stripe webhooks require the raw body for signature verification.
+  app.post(
+    '/api/stripe/webhook',
+    express.raw({ type: 'application/json' }),
+    require('./controllers/stripe.controller').webhook
+  );
+
   app.use(express.json({ limit: '4mb' }));
   app.use('/api', require('./routes'));
 
@@ -30,6 +38,7 @@ async function startServer() {
       server: 'connected',
       port: env.port,
       mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      stripe: env.stripeSecretKey ? 'configured' : 'missing',
     });
   });
 

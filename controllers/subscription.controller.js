@@ -25,7 +25,7 @@ const subscriptionController = {
     const data = await subscriptionService.startSubscription(req.user, req.body, requestMeta(req));
     res.status(201).json({
       success: true,
-      message: 'Subscription started',
+      message: 'Stripe Checkout session created',
       data,
     });
   }),
@@ -67,10 +67,31 @@ const subscriptionController = {
   }),
 
   paymentMethod: asyncHandler(async (req, res) => {
-    const data = await subscriptionService.updatePaymentMethod(req.user, req.body);
+    const data = await subscriptionService.createBillingPortalSession(req.user);
     res.status(200).json({
       success: true,
-      message: 'Payment method updated',
+      message: 'Billing portal session created',
+      data,
+    });
+  }),
+
+  syncCheckout: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.syncCheckoutSession(
+      req.user,
+      req.body?.sessionId || req.query?.session_id
+    );
+    res.status(200).json({
+      success: true,
+      message: 'Checkout synced from Stripe',
+      data,
+    });
+  }),
+
+  advanceTestClock: asyncHandler(async (req, res) => {
+    const data = await subscriptionService.advanceTestClock(req.user, req.body || {});
+    res.status(200).json({
+      success: true,
+      message: 'Test clock advanced',
       data,
     });
   }),

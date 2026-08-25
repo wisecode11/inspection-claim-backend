@@ -66,14 +66,24 @@ async function seedPlans() {
   await mongoose.connect(env.mongodbUri);
   require('../models');
   const { Plan } = require('../models');
+  const { ensurePlanPricesOnStripe } = require('../services/stripe-plan.service');
 
   for (const plan of PLANS) {
-    await Plan.findOneAndUpdate(
+    let doc = await Plan.findOneAndUpdate(
       { slug: plan.slug },
       { $set: { ...plan, isPublic: true, isActive: true } },
       { upsert: true, new: true }
     );
-    console.log(`Plan ready: ${plan.name}`);
+    if (env.stripeSecretKey || process.env.stripe_secret_key) {
+      try {
+        doc = await ensurePlanPricesOnStripe(doc);
+        console.log(`Plan ready + Stripe synced: ${plan.name}`);
+      } catch (error) {
+        console.log(`Plan ready (Stripe sync failed for ${plan.name}): ${error.message}`);
+      }
+    } else {
+      console.log(`Plan ready: ${plan.name}`);
+    }
   }
 
   await mongoose.disconnect();

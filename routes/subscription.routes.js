@@ -8,7 +8,6 @@ const {
   subscribeBody,
   changePlanBody,
   cancelBody,
-  paymentMethodBody,
 } = require('../validators/subscription.validator');
 const subscriptionController = require('../controllers/subscription.controller');
 
@@ -63,8 +62,31 @@ router.put(
   authenticate,
   requireCompany,
   requireRoles(USER_ROLES.COMPANY_ADMIN),
-  validateBody(paymentMethodBody),
   subscriptionController.paymentMethod
+);
+
+router.post(
+  '/me/billing-portal',
+  authenticate,
+  requireCompany,
+  requireRoles(USER_ROLES.COMPANY_ADMIN),
+  subscriptionController.paymentMethod
+);
+
+router.post(
+  '/me/sync-checkout',
+  authenticate,
+  requireCompany,
+  requireRoles(USER_ROLES.COMPANY_ADMIN),
+  subscriptionController.syncCheckout
+);
+
+router.post(
+  '/me/test-clock/advance',
+  authenticate,
+  requireCompany,
+  requireRoles(USER_ROLES.COMPANY_ADMIN),
+  subscriptionController.advanceTestClock
 );
 
 module.exports = router;

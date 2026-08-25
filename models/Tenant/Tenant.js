@@ -44,6 +44,7 @@ const tenantSchema = new Schema(
     branding: { type: brandingSchema, default: () => ({}) },
     billing: {
       stripeCustomerId: { type: String, trim: true, default: undefined },
+      testClockId: { type: String, trim: true, default: '' },
       email: { type: String, trim: true, lowercase: true, maxlength: 254, default: '' },
       paymentMethod: {
         brand: { type: String, trim: true, maxlength: 40, default: '' },

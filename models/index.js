@@ -46,7 +46,7 @@
  *   AuditLog ──> User / Tenant (optional)
  */
 
-const { Plan, Subscription, Invoice } = require('./Subscription');
+const { Plan, Subscription, Invoice, StripeWebhookEvent } = require('./Subscription');
 const { Tenant, PlatformSettings, UsageRecord } = require('./Tenant');
 const { User, Invite, Device, RefreshToken } = require('./User');
 const { Customer, Property } = require('./Customer');
@@ -65,6 +65,7 @@ const models = {
   Invite,
   Subscription,
   Invoice,
+  StripeWebhookEvent,
   RefreshToken,
   Device,
   PlatformSettings,
