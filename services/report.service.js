@@ -43,13 +43,25 @@ function normalizePdfStatus(report) {
   return REPORT_PDF_STATUSES.QUEUED;
 }
 
+/** Resolve ObjectId whether the field is raw or populated. */
+function refId(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object') {
+    if (value._id != null) return String(value._id);
+    if (value.id != null) return String(value.id);
+    return '';
+  }
+  const asString = String(value);
+  return asString === '[object Object]' ? '' : asString;
+}
+
 function toReportResponse(report, extras = {}) {
   const status = normalizeReportStatus(report.status);
   const pdfStatus = normalizePdfStatus(report);
   return {
     id: String(report._id),
-    jobId: String(report.jobId),
-    inspectionId: report.inspectionId ? String(report.inspectionId) : null,
+    jobId: refId(report.jobId),
+    inspectionId: report.inspectionId ? refId(report.inspectionId) : null,
     status,
     pdfStatus,
     version: report.version,
@@ -59,7 +71,7 @@ function toReportResponse(report, extras = {}) {
     reviewNotes: report.reviewNotes || '',
     rejectionReason: report.rejectionReason || '',
     changesRequested: report.changesRequested || '',
-    reviewedBy: report.reviewedBy ? String(report.reviewedBy) : null,
+    reviewedBy: report.reviewedBy ? refId(report.reviewedBy) : null,
     reviewedAt: report.reviewedAt || null,
     submittedAt: report.submittedAt || null,
     pageCount: report.pageCount || 0,
@@ -184,6 +196,11 @@ async function listReports(actor, query = {}) {
     const authorName = author
       ? `${author.profile?.firstName || ''} ${author.profile?.lastName || ''}`.trim() || author.email
       : '—';
+    const assignedId = job?.assignedTo
+      ? refId(job.assignedTo)
+      : author
+        ? refId(author)
+        : null;
     return toReportResponse(report, {
       jobNumber: job?.jobNumber || '',
       jobTitle: job?.title || '',
@@ -191,9 +208,33 @@ async function listReports(actor, query = {}) {
       claimNumber: job?.claim?.claimNumber || '',
       propertyAddress: job?.address?.formatted || job?.address?.line1 || report.dataSnapshot?.propertyAddress || '',
       inspectorName: report.dataSnapshot?.inspectorName || authorName,
+      inspectorId: assignedId || null,
       customerName: report.dataSnapshot?.customerName || '',
     });
   });
+}
+
+function listExtrasForReport(report, job) {
+  const assigned = job?.assignedTo && typeof job.assignedTo === 'object' ? job.assignedTo : null;
+  const assignedId = job?.assignedTo ? refId(job.assignedTo) : null;
+  const authorName = assigned
+    ? `${assigned.profile?.firstName || ''} ${assigned.profile?.lastName || ''}`.trim() || assigned.email
+    : '';
+  const customer = job?.customerId && typeof job.customerId === 'object' ? job.customerId : null;
+  return {
+    jobNumber: job?.jobNumber || '',
+    jobTitle: job?.title || '',
+    jobStatus: job ? normalizeStatus(job.status) : null,
+    claimNumber: job?.claim?.claimNumber || '',
+    propertyAddress:
+      job?.address?.formatted
+      || job?.address?.line1
+      || report.dataSnapshot?.propertyAddress
+      || '',
+    inspectorName: report.dataSnapshot?.inspectorName || authorName || '—',
+    inspectorId: assignedId || null,
+    customerName: report.dataSnapshot?.customerName || customer?.name || '',
+  };
 }
 
 async function getReportById(actor, reportId) {
@@ -202,6 +243,7 @@ async function getReportById(actor, reportId) {
     .populate('customerId', 'name email phone')
     .populate('assignedTo', 'email profile');
   return toReportResponse(report, {
+    ...listExtrasForReport(report, job),
     job: job ? jobService.toJobResponse(job) : null,
   });
 }
@@ -651,6 +693,198 @@ async function reviewPackage(actor, jobId) {
   };
 }
 
+/**
+ * Inspector mobile "Send to Admin": attach field PDF + capture payload,
+ * mark report submitted, and move the job into the admin review queue.
+ */
+async function submitInspectorEvidencePackage(inspector, jobId, body = {}) {
+  if (!mongoose.isValidObjectId(jobId)) {
+    throw new HttpError(400, 'Valid job id is required');
+  }
+
+  const job = await Job.findOne({
+    _id: jobId,
+    companyId: inspector.companyId,
+    assignedTo: inspector._id,
+  });
+  if (!job) {
+    throw new HttpError(404, 'Job not found');
+  }
+
+  const inspection = await ensureInspection(job, inspector);
+  const now = new Date();
+  const overallNotes = body.summary?.overallNotes || body.narrative || inspection.summary?.overallNotes || '';
+
+  inspection.status = INSPECTION_STATUSES.SUBMITTED;
+  inspection.completedAt = inspection.completedAt || now;
+  inspection.submittedAt = now;
+  inspection.summary = {
+    ...(inspection.summary || {}),
+    overallNotes: String(overallNotes || '').slice(0, 8000),
+  };
+  inspection.updatedBy = inspector._id;
+  if (body.clientUuid) {
+    inspection.clientUuid = String(body.clientUuid).slice(0, 120);
+  }
+  await inspection.save();
+
+  let report = await Report.findOne({ jobId: job._id, companyId: inspector.companyId })
+    .sort({ version: -1 });
+
+  const previousStatus = report ? normalizeReportStatus(report.status) : null;
+  const alreadySubmitted = [
+    REPORT_STATUSES.SUBMITTED,
+    REPORT_STATUSES.UNDER_REVIEW,
+    REPORT_STATUSES.APPROVED,
+  ].includes(previousStatus);
+
+  if (!report) {
+    report = await Report.create({
+      companyId: inspector.companyId,
+      jobId: job._id,
+      inspectionId: inspection._id,
+      generatedBy: inspector._id,
+      status: REPORT_STATUSES.DRAFT,
+      pdfStatus: REPORT_PDF_STATUSES.QUEUED,
+      version: 1,
+      narrative: '',
+      warnings: [],
+      createdBy: inspector._id,
+    });
+  } else if (LEGACY_PDF.has(report.status)) {
+    report.pdfStatus = report.status;
+    report.status = REPORT_STATUSES.DRAFT;
+  }
+
+  if (previousStatus === REPORT_STATUSES.REJECTED) {
+    report.status = REPORT_STATUSES.DRAFT;
+    report.rejectionReason = '';
+  }
+
+  const populated = await Job.findById(job._id)
+    .populate('customerId', 'name email phone')
+    .populate('assignedTo', 'email profile');
+
+  const inspectorName = `${inspector.profile?.firstName || ''} ${inspector.profile?.lastName || ''}`.trim()
+    || inspector.email
+    || 'Inspector';
+  const addressLine = job.address?.formatted
+    || [job.address?.line1, job.address?.city, job.address?.state, job.address?.postalCode]
+      .filter(Boolean)
+      .join(', ');
+  const customerName = populated?.customerId?.name
+    || body.capture?.homeownerName
+    || '';
+
+  const photos = await Photo.find({
+    jobId: job._id,
+    companyId: inspector.companyId,
+  }).sort({ sortOrder: 1, createdAt: 1 }).limit(200);
+
+  const narrative = String(body.narrative || overallNotes || report.narrative || '').slice(0, 12000);
+  report.narrative = narrative;
+  report.title = body.title || report.title || 'Roof Assessment Report';
+  report.inspectionId = inspection._id;
+  report.generatedBy = inspector._id;
+  report.updatedBy = inspector._id;
+  report.warnings = photos.length ? [] : ['No photos included in evidence package'];
+  report.dataSnapshot = {
+    ...(report.dataSnapshot || {}),
+    customerName,
+    propertyAddress: body.capture?.address || addressLine,
+    inspectorName,
+    dateOfLoss: job.claim?.dateOfLoss || null,
+    inspectedAt: inspection.completedAt || now,
+    photoIds: photos.map((photo) => photo._id),
+    includedSectionKeys: body.capture?.completedSteps || report.dataSnapshot?.includedSectionKeys || [],
+    notes: overallNotes,
+    capture: body.capture || null,
+  };
+
+  const pdfBase64Raw = body.pdfBase64 ? String(body.pdfBase64).trim() : '';
+  if (pdfBase64Raw) {
+    const cleaned = pdfBase64Raw.replace(/^data:application\/pdf;base64,/i, '');
+    let pdfBuffer;
+    try {
+      pdfBuffer = Buffer.from(cleaned, 'base64');
+    } catch {
+      throw new HttpError(400, 'Invalid PDF data');
+    }
+    if (!pdfBuffer.length) {
+      throw new HttpError(400, 'PDF data is empty');
+    }
+
+    const token = crypto.randomBytes(16).toString('hex');
+    const fileName = body.pdfFileName || `RoofCheck_${job.jobNumber || job._id}.pdf`;
+    report.pdfStatus = REPORT_PDF_STATUSES.READY;
+    report.pageCount = report.pageCount || 1;
+    report.generatedAt = now;
+    report.pdf = {
+      bucket: 'local',
+      key: `reports/${report._id}.pdf`,
+      url: `/api/reports/${report._id}/pdf?token=${token}`,
+      mimeType: 'application/pdf',
+      sizeBytes: pdfBuffer.length,
+      checksum: crypto.createHash('sha256').update(pdfBuffer).digest('hex'),
+      originalFileName: fileName,
+    };
+    report.errorMessage = '';
+    report.templateSnapshot = {
+      ...(report.templateSnapshot || {}),
+      pdfToken: token,
+      pdfBase64: cleaned,
+      source: 'inspector_mobile',
+    };
+  } else if (normalizePdfStatus(report) !== REPORT_PDF_STATUSES.READY) {
+    report.warnings = [...(report.warnings || []), 'Inspector submitted without an attached PDF'];
+  }
+
+  const currentReportStatus = normalizeReportStatus(report.status);
+  if (currentReportStatus === REPORT_STATUSES.APPROVED) {
+    // Keep approved reports intact; only refresh PDF/narrative above.
+  } else if (
+    currentReportStatus === REPORT_STATUSES.DRAFT
+    || currentReportStatus === REPORT_STATUSES.REJECTED
+  ) {
+    report.status = REPORT_STATUSES.SUBMITTED;
+    report.submittedAt = now;
+    report.changesRequested = '';
+    report.rejectionReason = '';
+  } else if (currentReportStatus === REPORT_STATUSES.UNDER_REVIEW) {
+    // Stay under review; package refresh for the admin.
+    report.submittedAt = report.submittedAt || now;
+  } else {
+    report.status = REPORT_STATUSES.SUBMITTED;
+    report.submittedAt = report.submittedAt || now;
+  }
+
+  await report.save();
+
+  const jobStatus = normalizeStatus(job.status);
+  if (jobStatus === JOB_STATUSES.REJECTED) {
+    applyStatusTimestamps(job, JOB_STATUSES.REOPENED);
+    applyStatusTimestamps(job, JOB_STATUSES.IN_PROGRESS);
+  }
+  if (
+    [JOB_STATUSES.ASSIGNED, JOB_STATUSES.REOPENED].includes(normalizeStatus(job.status))
+  ) {
+    applyStatusTimestamps(job, JOB_STATUSES.IN_PROGRESS);
+  }
+  if (normalizeStatus(job.status) === JOB_STATUSES.IN_PROGRESS) {
+    applyStatusTimestamps(job, JOB_STATUSES.SUBMITTED);
+  }
+  job.updatedBy = inspector._id;
+  await job.save();
+
+  const refreshedJob = await jobService.getJob(inspector, String(job._id));
+  return {
+    job: refreshedJob,
+    report: toReportResponse(report, listExtrasForReport(report, populated)),
+    alreadySubmitted,
+    photosUploaded: photos.length,
+  };
+}
+
 module.exports = {
   listReports,
   getReportById,
@@ -666,6 +900,7 @@ module.exports = {
   rejectReport,
   requestChanges,
   reviewPackage,
+  submitInspectorEvidencePackage,
   toReportResponse,
   normalizeReportStatus,
 };

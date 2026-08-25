@@ -75,6 +75,8 @@ const photoSchema = new Schema(
     },
     sortOrder: { type: Number, default: 0 },
     includeInReport: { type: Boolean, default: true },
+    /** Local PDF-style payload (base64 + download token). Not returned in list APIs. */
+    filePayload: { type: Schema.Types.Mixed, default: undefined, select: false },
     clientUuid: { type: String, trim: true },
   },
   { timestamps: true, collection: 'photos' }

@@ -30,7 +30,7 @@ async function startServer() {
     require('./controllers/stripe.controller').webhook
   );
 
-  app.use(express.json({ limit: '4mb' }));
+  app.use(express.json({ limit: '50mb' }));
   app.use('/api', require('./routes'));
 
   app.get('/', (_req, res) => {

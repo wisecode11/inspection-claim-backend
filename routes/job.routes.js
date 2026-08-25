@@ -93,4 +93,10 @@ router.patch(
   jobController.confirmLocation
 );
 
+router.post(
+  '/:id/submit',
+  requireRoles(USER_ROLES.INSPECTOR),
+  jobController.submit
+);
+
 module.exports = router;
