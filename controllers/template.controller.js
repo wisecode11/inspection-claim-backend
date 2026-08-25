@@ -22,6 +22,15 @@ const templateController = {
     });
   }),
 
+  reportLanguage: asyncHandler(async (req, res) => {
+    const reportLanguage = await templateService.getReportLanguagePackage(req.user);
+    res.status(200).json({
+      success: true,
+      message: 'Report language loaded',
+      data: { reportLanguage },
+    });
+  }),
+
   get: asyncHandler(async (req, res) => {
     const template = await templateService.getTemplate(req.user, req.params.id);
     res.status(200).json({

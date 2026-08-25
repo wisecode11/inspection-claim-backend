@@ -15,6 +15,13 @@ const router = Router();
 
 router.use(authenticate, requireCompany);
 
+/** Field + office: read company report language for PDF / review. */
+router.get(
+  '/report-language',
+  requireRoles(USER_ROLES.INSPECTOR, USER_ROLES.COMPANY_ADMIN, USER_ROLES.OFFICE_STAFF),
+  templateController.reportLanguage
+);
+
 router.get('/', requireOfficeAccess(PERMISSIONS.COMPANY_VIEW), templateController.list);
 router.get(
   '/default',
