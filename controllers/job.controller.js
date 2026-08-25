@@ -83,8 +83,17 @@ const jobController = {
     const job = await jobService.cancelJob(req.user, req.params.id, req.body.reason);
     res.status(200).json({
       success: true,
-      message: 'Job cancelled',
+      message: 'Job cancelled and unassigned — you can reassign another inspector',
       data: { job },
+    });
+  }),
+
+  remove: asyncHandler(async (req, res) => {
+    const data = await jobService.deleteJob(req.user, req.params.id);
+    res.status(200).json({
+      success: true,
+      message: 'Job deleted',
+      data,
     });
   }),
 

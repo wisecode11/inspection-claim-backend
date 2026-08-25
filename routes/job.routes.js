@@ -75,6 +75,12 @@ router.post(
   jobController.cancel
 );
 
+router.delete(
+  '/:id',
+  requireOfficeAccess(PERMISSIONS.JOBS_EDIT),
+  jobController.remove
+);
+
 router.post(
   '/:id/accept',
   requireRoles(USER_ROLES.INSPECTOR),
