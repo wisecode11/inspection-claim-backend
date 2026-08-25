@@ -26,6 +26,10 @@ function subscribeBody(body) {
     planId: body.planId.trim(),
     mode,
     interval,
+    testClockId:
+      typeof body.testClockId === 'string' && body.testClockId.trim()
+        ? body.testClockId.trim()
+        : undefined,
   };
 }
 

@@ -32,6 +32,7 @@ const invoiceSchema = new Schema(
     dueDate: { type: Date, default: null },
     attemptCount: { type: Number, min: 0, default: 0 },
     nextPaymentAttemptAt: { type: Date, default: null },
+    stripeCreatedAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'invoices' }
 );

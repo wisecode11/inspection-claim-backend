@@ -18,6 +18,7 @@ module.exports = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',
   jwtRefreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  appUrl: process.env.APP_URL || process.env.CORS_ORIGIN || 'http://localhost:3000',
   platformAdminEmail: process.env.PLATFORM_ADMIN_EMAIL || 'admin@gmail.com',
   platformAdminPassword: process.env.PLATFORM_ADMIN_PASSWORD || '11223344',
   weatherProvider: process.env.WEATHER_PROVIDER || 'open_meteo',
@@ -34,4 +35,11 @@ module.exports = {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
+  stripeSecretKey:
+    process.env.STRIPE_SECRET_KEY || process.env.stripe_secret_key || '',
+  stripePublishableKey:
+    process.env.STRIPE_PUBLISHABLE_KEY || process.env.stripe_publishable_key || '',
+  stripeWebhookSecret:
+    process.env.STRIPE_WEBHOOK_SECRET || process.env.stripe_webhook_secret || '',
+  stripeAutoTestClock: String(process.env.STRIPE_AUTO_TEST_CLOCK || '').toLowerCase() === 'true',
 };
