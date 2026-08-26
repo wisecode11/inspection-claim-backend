@@ -9,7 +9,6 @@ const {
   assertTransition,
   applyStatusTimestamps,
   statusAfterAssign,
-  canCancel,
 } = require('../utils/jobStatus');
 const geocodeService = require('./geocode.service');
 
@@ -474,19 +473,39 @@ async function updateJobStatus(actor, jobId, nextStatus) {
 
 async function cancelJob(actor, jobId, reason = '') {
   const job = await findCompanyJob(actor, jobId);
-  if (!canCancel(job.status)) {
-    throw new HttpError(400, `Cannot reject a job in status "${normalizeStatus(job.status)}"`);
+  const status = normalizeStatus(job.status);
+
+  if (!job.assignedTo && status === JOB_STATUSES.DRAFT) {
+    throw new HttpError(400, 'Job is already unassigned');
   }
 
-  applyStatusTimestamps(job, JOB_STATUSES.REJECTED);
+  if (
+    status === JOB_STATUSES.COMPLETED
+    || status === JOB_STATUSES.ARCHIVED
+  ) {
+    throw new HttpError(400, `Cannot cancel a job in status "${status}"`);
+  }
+
+  // Cancel = pull inspector off the job and return it to Unassigned so admin can reassign.
+  job.assignedTo = null;
+  job.cancelledAt = null;
+  applyStatusTimestamps(job, JOB_STATUSES.DRAFT);
   if (reason) {
-    job.notes = [job.notes, `Rejected: ${reason}`].filter(Boolean).join('\n');
+    job.notes = [job.notes, `Assignment cancelled: ${reason}`].filter(Boolean).join('\n');
+  } else {
+    job.notes = [job.notes, 'Assignment cancelled — ready to reassign'].filter(Boolean).join('\n');
   }
   job.updatedBy = actor._id;
   await job.save();
 
   const updated = await populateJob(job);
   return toJobResponse(updated);
+}
+
+async function deleteJob(actor, jobId) {
+  const job = await findCompanyJob(actor, jobId);
+  await job.softDelete(actor._id);
+  return { id: String(jobId) };
 }
 
 async function acceptJob(inspector, jobId) {
@@ -609,6 +628,7 @@ module.exports = {
   unassignJob,
   updateJobStatus,
   cancelJob,
+  deleteJob,
   acceptJob,
   listJobs,
   getJob,

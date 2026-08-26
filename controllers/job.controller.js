@@ -2,6 +2,7 @@
 
 const asyncHandler = require('../utils/asyncHandler');
 const jobService = require('../services/job.service');
+const reportService = require('../services/report.service');
 
 const jobController = {
   create: asyncHandler(async (req, res) => {
@@ -83,8 +84,17 @@ const jobController = {
     const job = await jobService.cancelJob(req.user, req.params.id, req.body.reason);
     res.status(200).json({
       success: true,
-      message: 'Job cancelled',
+      message: 'Job cancelled and unassigned — you can reassign another inspector',
       data: { job },
+    });
+  }),
+
+  remove: asyncHandler(async (req, res) => {
+    const data = await jobService.deleteJob(req.user, req.params.id);
+    res.status(200).json({
+      success: true,
+      message: 'Job deleted',
+      data,
     });
   }),
 
@@ -103,6 +113,21 @@ const jobController = {
       success: true,
       message: 'Inspection location confirmed',
       data: { job },
+    });
+  }),
+
+  submit: asyncHandler(async (req, res) => {
+    const data = await reportService.submitInspectorEvidencePackage(
+      req.user,
+      req.params.id,
+      req.body
+    );
+    res.status(200).json({
+      success: true,
+      message: data.alreadySubmitted
+        ? 'Evidence package updated for admin review'
+        : 'Evidence package submitted to admin',
+      data,
     });
   }),
 };

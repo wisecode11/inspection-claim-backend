@@ -299,6 +299,85 @@ async function getDefaultForCompany(companyId) {
   return ReportTemplate.findOne({ companyId, isActive: true }).sort({ updatedAt: -1 });
 }
 
+function findSectionBody(sections = [], key, title) {
+  const byKey = sections.find((row) => row.key === key);
+  if (byKey?.body?.trim()) return byKey.body.trim();
+  const byTitle = sections.find(
+    (row) => String(row.title || '').toLowerCase() === String(title || '').toLowerCase()
+  );
+  if (byTitle?.body?.trim()) return byTitle.body.trim();
+  return '';
+}
+
+/**
+ * Inspector mobile PDF package — company default narrative + selected citations.
+ * Read-only for field app; mirrors admin Report language tab.
+ */
+async function getReportLanguagePackage(user) {
+  const templateDoc = await ensureDefaultTemplate(user);
+  const sections = templateDoc.sections || [];
+
+  const summaryOfFindings = findSectionBody(
+    sections,
+    'summary_of_findings',
+    'Summary of Findings'
+  );
+  const investigationProcess = findSectionBody(
+    sections,
+    'investigation_process',
+    'Investigation Process'
+  );
+  let damageDefinitions = findSectionBody(
+    sections,
+    'damage_definitions_assessment_criteria',
+    'Damage Definitions & Assessment Criteria'
+  );
+  if (!damageDefinitions && templateDoc.definitions?.trim()) {
+    damageDefinitions = templateDoc.definitions.trim();
+  }
+  const existingConditions = findSectionBody(
+    sections,
+    'existing_conditions',
+    'Existing Conditions'
+  );
+
+  const citationIds = (templateDoc.codeCitationIds || []).filter((id) =>
+    mongoose.isValidObjectId(id)
+  );
+  let citations = [];
+  if (citationIds.length) {
+    citations = await CodeCitation.find({
+      _id: { $in: citationIds },
+      isActive: true,
+    })
+      .select('state code title body source')
+      .lean();
+
+    const order = new Map(citationIds.map((id, index) => [String(id), index]));
+    citations.sort(
+      (a, b) => (order.get(String(a._id)) ?? 0) - (order.get(String(b._id)) ?? 0)
+    );
+  }
+
+  return {
+    templateId: templateDoc.id,
+    templateName: templateDoc.name || '',
+    summaryOfFindings,
+    investigationProcess,
+    damageDefinitions,
+    existingConditions,
+    legalFooter: templateDoc.legalFooter || '',
+    citations: citations.map((row) => ({
+      id: String(row._id),
+      state: row.state || '',
+      code: row.code || '',
+      title: row.title || '',
+      body: row.body || '',
+      source: row.source || '',
+    })),
+  };
+}
+
 module.exports = {
   listTemplates,
   getTemplate,
@@ -306,6 +385,7 @@ module.exports = {
   createTemplate,
   updateTemplate,
   getDefaultForCompany,
+  getReportLanguagePackage,
   toTemplateResponse,
   EMPTY_LANGUAGE,
 };

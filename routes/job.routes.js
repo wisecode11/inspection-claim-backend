@@ -75,6 +75,12 @@ router.post(
   jobController.cancel
 );
 
+router.delete(
+  '/:id',
+  requireOfficeAccess(PERMISSIONS.JOBS_EDIT),
+  jobController.remove
+);
+
 router.post(
   '/:id/accept',
   requireRoles(USER_ROLES.INSPECTOR),
@@ -85,6 +91,12 @@ router.patch(
   '/:id/location',
   requireRoles(USER_ROLES.COMPANY_ADMIN, USER_ROLES.OFFICE_STAFF, USER_ROLES.INSPECTOR),
   jobController.confirmLocation
+);
+
+router.post(
+  '/:id/submit',
+  requireRoles(USER_ROLES.INSPECTOR),
+  jobController.submit
 );
 
 module.exports = router;
