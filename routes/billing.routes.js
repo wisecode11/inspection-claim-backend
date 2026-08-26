@@ -1,13 +1,13 @@
 'use strict';
 
 const { Router } = require('express');
-const { USER_ROLES } = require('../models/enums');
+const { USER_ROLES, SUBSCRIPTION_STATUSES } = require('../models/enums');
 const { authenticate, requireRoles } = require('../middlewares/auth.middleware');
 const { validateBody } = require('../middlewares/validate.middleware');
 const asyncHandler = require('../utils/asyncHandler');
 const { Plan, Tenant, Subscription, Invoice } = require('../models');
 const subscriptionService = require('../services/subscription.service');
-const { ensurePlanPricesOnStripe } = require('../services/stripe-plan.service');
+const { ensurePlanPricesOnStripe, setPlanActiveOnStripe, archivePlanOnStripe } = require('../services/stripe-plan.service');
 const HttpError = require('../utils/httpError');
 
 const router = Router();
@@ -87,27 +87,53 @@ function planBody(body = {}) {
   const yearlyAmount =
     Number(body.yearlyAmount ?? body.pricing?.yearlyAmount) || Math.round(monthlyAmount * 10);
 
+  function optionCopy(raw = {}) {
+    const bullets = Array.isArray(raw.bullets)
+      ? raw.bullets.map((item) => String(item || '').trim()).filter(Boolean)
+      : String(raw.bulletsText || '')
+          .split('\n')
+          .map((item) => item.trim())
+          .filter(Boolean);
+    return {
+      priceLabel: String(raw.priceLabel || '').trim(),
+      description: String(raw.description || '').trim(),
+      bullets,
+    };
+  }
+
+  const billingOptions = {
+    trial: optionCopy(body.billingOptions?.trial || body.trial || {}),
+    monthly: optionCopy(body.billingOptions?.monthly || body.monthly || {}),
+    annual: optionCopy(body.billingOptions?.annual || body.annual || {}),
+  };
+
+  const description =
+    String(body.description || '').trim() ||
+    billingOptions.monthly.description ||
+    billingOptions.trial.description ||
+    billingOptions.annual.description ||
+    '';
+
   return {
     name,
     slug,
-    description: String(body.description || '').trim(),
+    description,
     pricing: {
       monthlyAmount,
       yearlyAmount,
       currency: String(body.currency || body.pricing?.currency || 'USD').toUpperCase(),
       perSeat: true,
     },
+    billingOptions,
     trialDays: Number(body.trialDays) || 14,
     limits: {
-      seats: Number(body.seats ?? body.limits?.seats) || 5,
-      inspectionsPerMonth:
-        Number(body.inspectionsPerMonth ?? body.limits?.inspectionsPerMonth) || 500,
-      storageGb: Number(body.storageGb ?? body.limits?.storageGb) || 20,
+      // High seat cap = effectively unlimited team size (no seats field in admin UI)
+      seats: 9999,
+      // 0 = unlimited (no inspection / storage caps on plans)
+      inspectionsPerMonth: 0,
+      storageGb: 0,
       photosPerInspection: Number(body.limits?.photosPerInspection) || 80,
-      reportsPerMonth:
-        Number(body.reportsPerMonth ?? body.limits?.reportsPerMonth) ||
-        Number(body.inspectionsPerMonth ?? body.limits?.inspectionsPerMonth) ||
-        500,
+      reportsPerMonth: 0,
     },
     features: body.features || {
       weatherVerification: true,
@@ -138,6 +164,103 @@ router.post(
       success: true,
       message: 'Plan created and synced to Stripe',
       data: subscriptionService.toPlanResponse(plan),
+    });
+  })
+);
+
+router.patch(
+  '/plans/:id',
+  validateBody(planBody),
+  asyncHandler(async (req, res) => {
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) throw new HttpError(404, 'Plan not found');
+
+    const slugTaken = await Plan.findOne({
+      slug: req.body.slug,
+      _id: { $ne: plan._id },
+    });
+    if (slugTaken) {
+      throw new HttpError(409, 'Plan slug already exists');
+    }
+
+    plan.name = req.body.name;
+    plan.slug = req.body.slug;
+    plan.description = req.body.description;
+    plan.pricing = {
+      ...(plan.pricing?.toObject?.() || plan.pricing || {}),
+      ...req.body.pricing,
+    };
+    plan.billingOptions = req.body.billingOptions;
+    plan.trialDays = req.body.trialDays;
+    await plan.save();
+
+    const synced = await ensurePlanPricesOnStripe(plan);
+    res.status(200).json({
+      success: true,
+      message: 'Plan updated and synced to Stripe',
+      data: subscriptionService.toPlanResponse(synced),
+    });
+  })
+);
+
+router.patch(
+  '/plans/:id/status',
+  validateBody((body = {}) => {
+    if (typeof body.isActive !== 'boolean') {
+      throw new HttpError(400, 'isActive boolean is required');
+    }
+    return { isActive: body.isActive };
+  }),
+  asyncHandler(async (req, res) => {
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) throw new HttpError(404, 'Plan not found');
+
+    plan.isActive = req.body.isActive;
+    await plan.save();
+    await setPlanActiveOnStripe(plan, plan.isActive);
+    if (plan.isActive) {
+      await ensurePlanPricesOnStripe(plan);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: plan.isActive ? 'Plan activated' : 'Plan deactivated',
+      data: subscriptionService.toPlanResponse(plan),
+    });
+  })
+);
+
+router.delete(
+  '/plans/:id',
+  asyncHandler(async (req, res) => {
+    const plan = await Plan.findById(req.params.id);
+    if (!plan) throw new HttpError(404, 'Plan not found');
+
+    const activeSubscribers = await Subscription.countDocuments({
+      planId: plan._id,
+      status: {
+        $in: [
+          SUBSCRIPTION_STATUSES.TRIALING,
+          SUBSCRIPTION_STATUSES.ACTIVE,
+          SUBSCRIPTION_STATUSES.PAST_DUE,
+          SUBSCRIPTION_STATUSES.UNPAID,
+        ],
+      },
+    });
+    if (activeSubscribers > 0) {
+      throw new HttpError(
+        400,
+        'Cannot delete a plan with active subscribers. Deactivate it instead.',
+      );
+    }
+
+    await archivePlanOnStripe(plan);
+    await Plan.deleteOne({ _id: plan._id });
+
+    res.status(200).json({
+      success: true,
+      message: 'Plan deleted',
+      data: { id: String(plan._id) },
     });
   })
 );

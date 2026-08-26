@@ -12,7 +12,7 @@ const PLANS = [
     description: 'For small roofing crews getting claim files in order.',
     pricing: { monthlyAmount: 149, yearlyAmount: 1490, currency: 'USD', perSeat: true },
     trialDays: 14,
-    limits: { seats: 5, inspectionsPerMonth: 500, storageGb: 20, photosPerInspection: 80, reportsPerMonth: 500 },
+    limits: { seats: 9999, inspectionsPerMonth: 0, storageGb: 0, photosPerInspection: 80, reportsPerMonth: 0 },
     features: {
       weatherVerification: true,
       stormMap: false,
@@ -30,7 +30,7 @@ const PLANS = [
     description: 'Branding, weather checks, and room for a growing team.',
     pricing: { monthlyAmount: 499, yearlyAmount: 4990, currency: 'USD', perSeat: true },
     trialDays: 14,
-    limits: { seats: 15, inspectionsPerMonth: 2500, storageGb: 100, photosPerInspection: 120, reportsPerMonth: 2500 },
+    limits: { seats: 9999, inspectionsPerMonth: 0, storageGb: 0, photosPerInspection: 120, reportsPerMonth: 0 },
     features: {
       weatherVerification: true,
       stormMap: true,
@@ -48,7 +48,7 @@ const PLANS = [
     description: 'Unlimited volume with audit controls and dedicated support.',
     pricing: { monthlyAmount: 1499, yearlyAmount: 14990, currency: 'USD', perSeat: true },
     trialDays: 14,
-    limits: { seats: 60, inspectionsPerMonth: 0, storageGb: 500, photosPerInspection: 200, reportsPerMonth: 0 },
+    limits: { seats: 9999, inspectionsPerMonth: 0, storageGb: 0, photosPerInspection: 200, reportsPerMonth: 0 },
     features: {
       weatherVerification: true,
       stormMap: true,

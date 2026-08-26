@@ -7,6 +7,18 @@ const auditFieldsPlugin = require('../plugins/auditFields.plugin');
 
 const { Schema } = mongoose;
 
+const billingOptionCopySchema = new Schema(
+  {
+    priceLabel: { type: String, trim: true, maxlength: 120, default: '' },
+    description: { type: String, trim: true, maxlength: 500, default: '' },
+    bullets: {
+      type: [{ type: String, trim: true, maxlength: 200 }],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
 /**
  * Platform-level pricing catalog.
  * Tenants subscribe to a Plan; limits/features are enforced at API layer.
@@ -21,6 +33,12 @@ const planSchema = new Schema(
       yearlyAmount: { type: Number, min: 0, default: 0 },
       currency: { type: String, trim: true, uppercase: true, default: 'USD', maxlength: 3 },
       perSeat: { type: Boolean, default: true },
+    },
+    /** Per billing-option marketing copy shown on company plan picker. */
+    billingOptions: {
+      trial: { type: billingOptionCopySchema, default: () => ({}) },
+      monthly: { type: billingOptionCopySchema, default: () => ({}) },
+      annual: { type: billingOptionCopySchema, default: () => ({}) },
     },
     stripe: {
       productId: { type: String, trim: true, default: '', index: true },

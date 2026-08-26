@@ -25,18 +25,42 @@ const {
 } = require('./stripe-plan.service');
 const { syncSubscriptionFromStripe, syncInvoiceFromStripe } = require('./stripe-sync.service');
 
+function normalizeOptionCopy(option = {}, fallbackDescription = '') {
+  const bullets = Array.isArray(option.bullets)
+    ? option.bullets.map((item) => String(item || '').trim()).filter(Boolean)
+    : [];
+  return {
+    priceLabel: String(option.priceLabel || '').trim(),
+    description: String(option.description || fallbackDescription || '').trim(),
+    bullets,
+  };
+}
+
 function toPlanResponse(plan) {
+  const description = plan.description || '';
+  const monthlyAmount = plan.pricing?.monthlyAmount || 0;
+  const billingOptions = plan.billingOptions || {};
+  const trial = normalizeOptionCopy(billingOptions.trial, description);
+  if (!trial.priceLabel) {
+    trial.priceLabel = '$0';
+  }
+
   return {
     id: String(plan._id),
     name: plan.name,
     slug: plan.slug,
-    description: plan.description || '',
-    price: plan.pricing?.monthlyAmount || 0,
+    description,
+    price: monthlyAmount,
     yearlyPrice: plan.pricing?.yearlyAmount || 0,
     currency: plan.pricing?.currency || 'USD',
     trialDays: plan.trialDays || 0,
     limits: plan.limits,
     features: plan.features,
+    billingOptions: {
+      trial,
+      monthly: normalizeOptionCopy(billingOptions.monthly, description),
+      annual: normalizeOptionCopy(billingOptions.annual, description),
+    },
     highlight: plan.slug === 'pro',
     isActive: plan.isActive !== false,
     isPublic: plan.isPublic !== false,

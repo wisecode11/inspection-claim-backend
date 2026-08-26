@@ -4,11 +4,11 @@ const { Schema } = require('mongoose');
 
 const planLimitsSchema = new Schema(
   {
-    seats: { type: Number, min: 1, default: 3 },
-    inspectionsPerMonth: { type: Number, min: 0, default: 50 },
-    storageGb: { type: Number, min: 1, default: 10 },
+    seats: { type: Number, min: 1, default: 9999 },
+    inspectionsPerMonth: { type: Number, min: 0, default: 0 },
+    storageGb: { type: Number, min: 0, default: 0 },
     photosPerInspection: { type: Number, min: 1, default: 80 },
-    reportsPerMonth: { type: Number, min: 0, default: 50 },
+    reportsPerMonth: { type: Number, min: 0, default: 0 },
   },
   { _id: false }
 );
