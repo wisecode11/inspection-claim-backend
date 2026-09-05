@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const { Customer, Property, Job, User, Inspection, Report, Photo } = require('../models');
 const { USER_ROLES, USER_STATUSES, JOB_STATUSES, JOB_PRIORITIES, CLAIM_STATUSES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
+const pushService = require('./push.service');
 const {
   normalizeStatus,
   assertTransition,
@@ -428,7 +429,19 @@ async function assignJob(actor, jobId, inspectorId, options = {}) {
 
   await job.save();
   const updated = await populateJob(job);
-  return toJobResponse(updated);
+  const response = toJobResponse(updated);
+
+  pushService.notifyUserSafe(inspector._id, {
+    title: 'New job assigned',
+    body: ('Job ' + (response.jobNumber || '') + ' is ready for inspection.').replace(/\s+/g, ' ').trim(),
+    data: {
+      type: 'job_assigned',
+      jobId: String(job._id),
+      jobNumber: response.jobNumber || '',
+    },
+  });
+
+  return response;
 }
 
 async function bulkAssignJobs(actor, payload = {}) {
@@ -531,10 +544,7 @@ async function listJobs(user, query = {}) {
     .populate('assignedTo', 'email role profile')
     .populate('propertyId');
 
-  for (const job of jobs) {
-    await geocodeService.geocodeAndSave([job, job.propertyId], job.address);
-  }
-
+  // Do not geocode on list — external calls made listJobs exceed the web 15s timeout.
   return jobs.map((job) => toJobResponse(job));
 }
 

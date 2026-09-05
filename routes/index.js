@@ -19,6 +19,7 @@ const checklistRoutes = require('./checklist.routes');
 const templateRoutes = require('./template.routes');
 const analyticsRoutes = require('./analytics.routes');
 const auditRoutes = require('./audit.routes');
+const deviceRoutes = require('./device.routes');
 
 const router = Router();
 
@@ -39,5 +40,6 @@ router.use('/checklists', checklistRoutes);
 router.use('/templates', templateRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/audit', auditRoutes);
+router.use('/devices', deviceRoutes);
 
 module.exports = router;

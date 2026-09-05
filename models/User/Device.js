@@ -6,7 +6,7 @@ const tenantScopedPlugin = require('../plugins/tenantScoped.plugin');
 
 const { Schema } = mongoose;
 
-/** Inspector devices — used for offline sync diagnostics and support. */
+/** Inspector devices — used for offline sync diagnostics and push delivery. */
 const deviceSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -22,6 +22,7 @@ const deviceSchema = new Schema(
     lastSyncAt: { type: Date, default: null },
     lastSeenAt: { type: Date, default: null },
     pushToken: { type: String, trim: true, default: '', select: false },
+    pushEnabled: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true, collection: 'devices' }
