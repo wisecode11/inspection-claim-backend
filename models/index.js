@@ -48,7 +48,7 @@
 
 const { Plan, Subscription, Invoice, StripeWebhookEvent } = require('./Subscription');
 const { Tenant, PlatformSettings, UsageRecord } = require('./Tenant');
-const { User, Invite, Device, RefreshToken } = require('./User');
+const { User, Invite, Device, RefreshToken, Notification } = require('./User');
 const { Customer, Property } = require('./Customer');
 const { Job, Inspection, Elevation, TestSquare, CollateralItem } = require('./Job');
 const { Photo } = require('./Photo');
@@ -68,6 +68,7 @@ const models = {
   StripeWebhookEvent,
   RefreshToken,
   Device,
+  Notification,
   PlatformSettings,
   Customer,
   Property,

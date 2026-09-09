@@ -20,6 +20,7 @@ const templateRoutes = require('./template.routes');
 const analyticsRoutes = require('./analytics.routes');
 const auditRoutes = require('./audit.routes');
 const deviceRoutes = require('./device.routes');
+const notificationRoutes = require('./notification.routes');
 
 const router = Router();
 
@@ -41,5 +42,6 @@ router.use('/templates', templateRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/audit', auditRoutes);
 router.use('/devices', deviceRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

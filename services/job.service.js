@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const { Customer, Property, Job, User, Inspection, Report, Photo } = require('../models');
 const { USER_ROLES, USER_STATUSES, JOB_STATUSES, JOB_PRIORITIES, CLAIM_STATUSES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
-const pushService = require('./push.service');
+const notificationService = require('./notification.service');
 const {
   normalizeStatus,
   assertTransition,
@@ -431,15 +431,7 @@ async function assignJob(actor, jobId, inspectorId, options = {}) {
   const updated = await populateJob(job);
   const response = toJobResponse(updated);
 
-  pushService.notifyUserSafe(inspector._id, {
-    title: 'New job assigned',
-    body: ('Job ' + (response.jobNumber || '') + ' is ready for inspection.').replace(/\s+/g, ' ').trim(),
-    data: {
-      type: 'job_assigned',
-      jobId: String(job._id),
-      jobNumber: response.jobNumber || '',
-    },
-  });
+  notificationService.notifyJobAssignedSafe(inspector, response);
 
   return response;
 }
