@@ -95,10 +95,31 @@ function logoutBody(body) {
   };
 }
 
+function updateProfileBody(body) {
+  return {
+    firstName: requiredString(body.firstName, 'First name').slice(0, 80),
+    lastName: optionalString(body.lastName, 'Last name', 80),
+    phone: optionalString(body.phone, 'Phone', 30),
+    licenseNumber: optionalString(body.licenseNumber, 'License number', 80),
+  };
+}
+
+function avatarUploadBody(body) {
+  const raw = requiredString(body.base64, 'Image');
+  // Accept either a bare base64 string or a data URI.
+  const base64 = raw.replace(/^data:[^;]+;base64,/i, '').replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    throw new HttpError(400, 'Invalid image data');
+  }
+  return { base64 };
+}
+
 module.exports = {
   registerBody,
   loginBody,
   googleAuthBody,
   refreshBody,
   logoutBody,
+  updateProfileBody,
+  avatarUploadBody,
 };

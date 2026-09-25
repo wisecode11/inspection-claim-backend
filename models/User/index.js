@@ -5,6 +5,7 @@ const Invite = require('./Invite');
 const Device = require('./Device');
 const RefreshToken = require('./RefreshToken');
 const Notification = require('./Notification');
+const UserAvatar = require('./UserAvatar');
 
 module.exports = {
   User,
@@ -12,4 +13,5 @@ module.exports = {
   Device,
   RefreshToken,
   Notification,
+  UserAvatar,
 };

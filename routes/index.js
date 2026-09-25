@@ -21,6 +21,7 @@ const analyticsRoutes = require('./analytics.routes');
 const auditRoutes = require('./audit.routes');
 const deviceRoutes = require('./device.routes');
 const notificationRoutes = require('./notification.routes');
+const avatarRoutes = require('./avatar.routes');
 
 const router = Router();
 
@@ -43,5 +44,6 @@ router.use('/analytics', analyticsRoutes);
 router.use('/audit', auditRoutes);
 router.use('/devices', deviceRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/avatars', avatarRoutes);
 
 module.exports = router;
