@@ -104,6 +104,23 @@ function updateProfileBody(body) {
   };
 }
 
+function changePasswordBody(body) {
+  const currentPassword = requiredString(body.currentPassword, 'Current password');
+  const newPassword = requiredString(body.newPassword, 'New password', 8);
+  if (newPassword.length > 128) {
+    throw new HttpError(400, 'New password is too long');
+  }
+  if (newPassword === currentPassword) {
+    throw new HttpError(400, 'New password must be different from your current password');
+  }
+  return {
+    currentPassword,
+    newPassword,
+    deviceId: optionalString(body.deviceId, 'Device id', 120),
+    platform: parsePlatform(body.platform),
+  };
+}
+
 function avatarUploadBody(body) {
   const raw = requiredString(body.base64, 'Image');
   // Accept either a bare base64 string or a data URI.
@@ -121,5 +138,6 @@ module.exports = {
   refreshBody,
   logoutBody,
   updateProfileBody,
+  changePasswordBody,
   avatarUploadBody,
 };

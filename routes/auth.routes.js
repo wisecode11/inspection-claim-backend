@@ -12,6 +12,7 @@ const {
   refreshBody,
   logoutBody,
   updateProfileBody,
+  changePasswordBody,
   avatarUploadBody,
 } = require('../validators/auth.validator');
 
@@ -24,6 +25,12 @@ router.post('/refresh', validateBody(refreshBody), authController.refresh);
 router.post('/logout', optionalAuthenticate, validateBody(logoutBody), authController.logout);
 router.get('/me', authenticate, authController.me);
 router.patch('/me', authenticate, validateBody(updateProfileBody), profileController.updateMe);
+router.post(
+  '/me/password',
+  authenticate,
+  validateBody(changePasswordBody),
+  profileController.changePassword
+);
 router.put('/me/avatar', authenticate, validateBody(avatarUploadBody), profileController.uploadAvatar);
 router.delete('/me/avatar', authenticate, profileController.removeAvatar);
 

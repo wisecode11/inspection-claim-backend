@@ -9,6 +9,14 @@ const profileController = {
     res.status(200).json({ success: true, message: 'Profile updated', data });
   }),
 
+  changePassword: asyncHandler(async (req, res) => {
+    const data = await profileService.changeMyPassword(req.user, req.body, {
+      ip: req.ip || '',
+      userAgent: req.get('user-agent') || '',
+    });
+    res.status(200).json({ success: true, message: 'Password updated', data });
+  }),
+
   uploadAvatar: asyncHandler(async (req, res) => {
     const data = await profileService.setMyAvatar(req.user, req.body);
     res.status(200).json({ success: true, message: 'Profile photo updated', data });

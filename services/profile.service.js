@@ -2,9 +2,11 @@
 
 const crypto = require('crypto');
 
-const { UserAvatar } = require('../models');
+const { User, UserAvatar } = require('../models');
 const HttpError = require('../utils/httpError');
+const { hashPassword, comparePassword } = require('../utils/password');
 const { toUserResponse } = require('../utils/userResponse');
+const tokenService = require('./token.service');
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const AVATAR_KEY_RE = /^[a-f0-9]{32}$/;
@@ -79,6 +81,37 @@ async function removeMyAvatar(user) {
   return { user: toUserResponse(user) };
 }
 
+/**
+ * Self-service password change. Signs every other session out (all refresh tokens are
+ * revoked) and hands this device a fresh token pair so it stays signed in.
+ */
+async function changeMyPassword(user, payload, meta = {}) {
+  const account = await User.findById(user._id).select('+passwordHash');
+  if (!account || !account.passwordHash) {
+    throw new HttpError(400, 'This account signs in without a password');
+  }
+
+  // 400, not 401: a 401 makes clients treat the session as expired and refresh/log out.
+  const matched = await comparePassword(payload.currentPassword, account.passwordHash);
+  if (!matched) {
+    throw new HttpError(400, 'Current password is incorrect');
+  }
+
+  account.passwordHash = await hashPassword(payload.newPassword);
+  account.passwordChangedAt = new Date();
+  account.updatedBy = account._id;
+  await account.save();
+
+  await tokenService.revokeAllUserTokens(account._id);
+  const tokens = await tokenService.issueTokenPair(account, {
+    ...meta,
+    deviceId: payload.deviceId,
+    platform: payload.platform,
+  });
+
+  return { user: toUserResponse(account), tokens };
+}
+
 async function getAvatarByKey(key) {
   if (!AVATAR_KEY_RE.test(String(key || ''))) {
     throw new HttpError(404, 'Avatar not found');
@@ -94,5 +127,6 @@ module.exports = {
   updateMyProfile,
   setMyAvatar,
   removeMyAvatar,
+  changeMyPassword,
   getAvatarByKey,
 };
