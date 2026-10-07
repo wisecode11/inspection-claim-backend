@@ -24,6 +24,10 @@ module.exports = {
   weatherProvider: process.env.WEATHER_PROVIDER || 'open_meteo',
   weatherWindowDays: Number(process.env.WEATHER_WINDOW_DAYS) || 1,
   weatherCacheTtlHours: Number(process.env.WEATHER_CACHE_TTL_HOURS) || 24,
+  // NOAA weather evidence (see docs/weather-evidence.md)
+  weatherEventRadiusMiles: Number(process.env.WEATHER_EVENT_RADIUS_MILES) || 10,
+  weatherHistoryRadiusMiles: Number(process.env.WEATHER_HISTORY_RADIUS_MILES) || 5,
+  weatherHistoryYears: Number(process.env.WEATHER_HISTORY_YEARS) || 3,
   smtpHost: process.env.SMTP_HOST || '',
   smtpPort: Number(process.env.SMTP_PORT) || 587,
   smtpUser: process.env.SMTP_USER || '',

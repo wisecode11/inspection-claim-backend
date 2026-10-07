@@ -1,10 +1,11 @@
 'use strict';
 
 const mongoose = require('mongoose');
-const { Job, WeatherVerification } = require('../models');
+const { Job, StormEvent, WeatherVerification } = require('../models');
 const { USER_ROLES, WEATHER_MATCH_STATUSES, WEATHER_EVENT_TYPES } = require('../models/enums');
 const HttpError = require('../utils/httpError');
 const env = require('../config/env');
+const weatherEvidence = require('./weather-evidence.service');
 
 const REQUEST_MS = 10000;
 const HAIL_CODES = new Set([96, 99]);
@@ -227,8 +228,107 @@ function collectEvents(payload, dateOfLoss) {
   return { events, hailFound, thunderFound, peakWind, peakRain, stormAt };
 }
 
+/** Evidence level → stored match status. Model-only data never becomes a "match". */
+function matchFromLevel(level) {
+  if (level === 'observed' || level === 'radar_estimated') return WEATHER_MATCH_STATUSES.MATCH;
+  if (level === 'model_indicated') return WEATHER_MATCH_STATUSES.INCONCLUSIVE;
+  if (level === 'none') return WEATHER_MATCH_STATUSES.MISMATCH;
+  return WEATHER_MATCH_STATUSES.NO_DATA;
+}
+
+/** Summary copy for NOAA evidence. Keeps the legacy `summary` keys so older app builds still render. */
+function evidenceSummary(evidence, data) {
+  const snapshot = data.snapshot || {};
+  const hail = evidence.hail || {};
+  const observedHail = hail.observed || {};
+  const radarHail = hail.radar || {};
+  const observedWind = evidence.wind?.observed || {};
+  const nearestHail = observedHail.nearest;
+  const nearestRadar = radarHail.nearest;
+
+  const byLevel = {
+    observed: {
+      badgeTitle: 'Storm Verified — Observed Reports',
+      weather: 'Storm Reported Near Property',
+      stormMatch: 'Verified (observed reports)',
+    },
+    radar_estimated: {
+      badgeTitle: 'Radar-Estimated Hail',
+      weather: 'Radar Hail Signatures Near Property',
+      stormMatch: 'Supported (radar-estimated)',
+    },
+    model_indicated: {
+      badgeTitle: 'Not Verified — Model Only',
+      weather: 'Model-Indicated Only',
+      stormMatch: 'Not verified (model only)',
+    },
+    none: {
+      badgeTitle: 'No Matching Storm',
+      weather: 'No Storm Reports Found',
+      stormMatch: 'Mismatch',
+    },
+    unavailable: {
+      badgeTitle: 'Weather Data Unavailable',
+      weather: 'No Data',
+      stormMatch: 'No Data',
+    },
+  };
+  const copy = byLevel[evidence.level] || byLevel.unavailable;
+
+  let hailText = 'No hail reports or radar signatures';
+  if (observedHail.count) {
+    hailText = `Reported up to ${Number(observedHail.maxSizeIn || 0).toFixed(2)}"` +
+      (nearestHail ? ` (nearest ${nearestHail.distanceMiles} mi ${nearestHail.direction})` : '');
+  } else if (radarHail.count) {
+    hailText = `Radar est. up to ${Number(radarHail.maxSizeIn || 0).toFixed(2)}"` +
+      (nearestRadar ? ` (nearest ${nearestRadar.distanceMiles} mi ${nearestRadar.direction})` : '');
+  } else if (evidence.level === 'model_indicated' && evidence.model?.hailCodeFound) {
+    hailText = 'Model-indicated only (not verified)';
+  } else if (evidence.level === 'unavailable') {
+    hailText = '—';
+  }
+
+  const windText = observedWind.count && observedWind.maxMph
+    ? `Reported up to ${Math.round(observedWind.maxMph)} mph`
+    : snapshot.windMph != null
+      ? `${formatWind(snapshot.windMph)} (model)`
+      : '—';
+
+  return {
+    badgeTitle: copy.badgeTitle,
+    badgeSub: evidence.headline,
+    // The claimed date; individual reports (which may fall on adjacent days in the search
+    // window) carry their own timestamps in the evidence tables.
+    stormDate: formatStormDate(data.dateOfLoss),
+    weather: copy.weather,
+    hail: hailText,
+    wind: windText,
+    rain: snapshot.rainIn != null ? `${formatRain(snapshot.rainIn)} (model)` : '—',
+    stormMatch: copy.stormMatch,
+  };
+}
+
 function toWeatherResponse(doc) {
   const data = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+  const evidence = data.snapshot?.evidence;
+  if (evidence) {
+    return {
+      id: String(data._id),
+      jobId: String(data.jobId),
+      provider: data.provider,
+      matchStatus: data.matchStatus,
+      dateOfLoss: data.dateOfLoss,
+      lookedUpAt: data.lookedUpAt,
+      address: data.address,
+      location: data.location,
+      mismatchNote: data.mismatchNote || '',
+      summary: evidenceSummary(evidence, data),
+      evidence,
+      events: data.events || [],
+    };
+  }
+
+  // Legacy records (Open-Meteo only, before NOAA evidence).
   const copy = matchCopy(data.matchStatus);
   const hailEvent = (data.events || []).find((event) => event.type === WEATHER_EVENT_TYPES.HAIL);
   const windEvent = (data.events || []).find((event) => event.type === WEATHER_EVENT_TYPES.WIND);
@@ -354,8 +454,63 @@ async function saveVerification(job, user, lookup, errorMessage) {
   return toWeatherResponse(record);
 }
 
+/** NOAA evidence for the job, with Open-Meteo kept as supporting model data. */
+async function lookupEvidence(job) {
+  const coords = jobCoordinates(job);
+  if (!coords) throw new Error('Job has no geocoded coordinates');
+  if (!job.claim?.dateOfLoss) throw new Error('Job has no date of loss');
+
+  const [modelSettled] = await Promise.allSettled([lookupOpenMeteo(job)]);
+  const modelLookup = modelSettled.status === 'fulfilled' ? modelSettled.value : null;
+  const evidence = await weatherEvidence.buildEvidence({
+    origin: coords,
+    dateOfLoss: job.claim.dateOfLoss,
+    config: {
+      windowDays: Math.max(0, env.weatherWindowDays),
+      eventRadiusMiles: env.weatherEventRadiusMiles,
+      historyRadiusMiles: env.weatherHistoryRadiusMiles,
+      historyYears: env.weatherHistoryYears,
+    },
+    model: modelLookup ? modelLookup.snapshot : null,
+    StormEvent,
+  });
+
+  // Strongest evidence first, so the stored events list reads top-down.
+  const events = [...evidence.observedReports, ...evidence.radarDetections]
+    .slice(0, 40)
+    .map((item) => ({
+      occurredAt: new Date(item.occurredAt),
+      type: item.type,
+      magnitude: String(item.magnitudeLabel || '').slice(0, 80),
+      distanceMiles: item.distanceMiles,
+      sourceEventId: `${item.source}|${item.providerEventId}`.slice(0, 200),
+      raw: { source: item.source, evidence: item.evidence, direction: item.direction },
+    }));
+
+  return {
+    provider: 'noaa',
+    matchStatus: matchFromLevel(evidence.level),
+    events,
+    snapshot: { ...(modelLookup?.snapshot || {}), evidence },
+    mismatchNote: evidence.headline.slice(0, 1000),
+    location: { type: 'Point', coordinates: [coords.longitude, coords.latitude] },
+  };
+}
+
+/** True when a stored lookup was made for the job's current date of loss and coordinates. */
+function matchesJob(record, job) {
+  if (!job.claim?.dateOfLoss || toYmd(record.dateOfLoss) !== toYmd(job.claim.dateOfLoss)) return false;
+  const coords = jobCoordinates(job);
+  const [lon, lat] = record.location?.coordinates || [];
+  if (!coords || typeof lat !== 'number' || typeof lon !== 'number') return false;
+  // ~10 m tolerance for float noise.
+  return Math.abs(coords.latitude - lat) < 1e-4 && Math.abs(coords.longitude - lon) < 1e-4;
+}
+
 function isFresh(record, dateOfLoss) {
   if (!record) return false;
+  // Records made before NOAA evidence (or by an older evidence version) are refreshed.
+  if (record.snapshot?.evidence?.version !== weatherEvidence.EVIDENCE_VERSION) return false;
   if (toYmd(record.dateOfLoss) !== toYmd(dateOfLoss)) return false;
   const ageMs = Date.now() - new Date(record.lookedUpAt).getTime();
   return ageMs < env.weatherCacheTtlHours * 60 * 60 * 1000;
@@ -375,13 +530,13 @@ async function verifyForJob(user, jobId, { force = false } = {}) {
       companyId: user.companyId,
       jobId: job._id,
     }).sort({ lookedUpAt: -1 });
-    if (isFresh(existing, job.claim.dateOfLoss)) {
+    if (isFresh(existing, job.claim.dateOfLoss) && matchesJob(existing, job)) {
       return toWeatherResponse(existing);
     }
   }
 
   try {
-    const lookup = await lookupOpenMeteo(job);
+    const lookup = await lookupEvidence(job);
     return saveVerification(job, user, lookup);
   } catch (error) {
     return saveVerification(job, user, null, error.message || 'Weather lookup failed');
@@ -395,7 +550,9 @@ async function getForJob(user, jobId) {
     jobId: job._id,
   }).sort({ lookedUpAt: -1 });
 
-  if (existing) {
+  // Reuse the stored evidence only if it was made for the job's current date of loss and
+  // location; records made before NOAA evidence, or before the job was edited, are refreshed.
+  if (existing?.snapshot?.evidence && matchesJob(existing, job)) {
     return toWeatherResponse(existing);
   }
   return verifyForJob(user, jobId);

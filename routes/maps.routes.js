@@ -15,4 +15,12 @@ router.get(
   mapsController.staticMap
 );
 
+router.get(
+  '/swath-base',
+  authenticate,
+  requireRoles(USER_ROLES.COMPANY_ADMIN, USER_ROLES.INSPECTOR, USER_ROLES.OFFICE_STAFF),
+  requireCompany,
+  mapsController.swathBase
+);
+
 module.exports = router;
