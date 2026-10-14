@@ -24,8 +24,76 @@ const { buildSimplePdf } = require('../utils/simplePdf');
 const jobService = require('./job.service');
 const templateService = require('./template.service');
 const { sendBrandedReportShare } = require('./email.service');
+const pdfStorage = require('./pdf-storage.service');
 
 const LEGACY_PDF = new Set(['queued', 'generating', 'ready', 'failed']);
+
+const PDF_SOURCE = { INSPECTOR: 'inspector_mobile', SERVER: 'server_summary' };
+
+/** True when the current PDF is the inspector's evidence package from the mobile app. */
+function hasInspectorPdf(report) {
+  return (
+    report.pdfSource === PDF_SOURCE.INSPECTOR
+    || report.templateSnapshot?.source === PDF_SOURCE.INSPECTOR
+  );
+}
+
+/** Report snapshot without the legacy inline PDF bytes. */
+function snapshotWithoutPdfBytes(snapshot) {
+  const { pdfBase64: _dropped, ...rest } = snapshot || {};
+  return rest;
+}
+
+/**
+ * Store `buffer` as the report's current PDF (GridFS) and keep the previous one in
+ * `pdfHistory` — PDFs are never overwritten or deleted. Legacy inline base64 PDFs are
+ * moved into GridFS first so they survive too. Caller saves the report.
+ */
+async function storeReportPdf(report, buffer, { fileName, source, actorId }) {
+  const legacyBase64 = report.templateSnapshot?.pdfBase64;
+  let previous = null;
+
+  if (pdfStorage.isGridFsFile(report.pdf)) {
+    previous = report.pdf.toObject ? report.pdf.toObject() : { ...report.pdf };
+  } else if (legacyBase64) {
+    previous = await pdfStorage.savePdf(Buffer.from(legacyBase64, 'base64'), {
+      fileName: report.pdf?.originalFileName || `report-${report._id}.pdf`,
+      reportId: report._id,
+      companyId: report.companyId,
+      source: report.templateSnapshot?.source || report.pdfSource || '',
+    });
+  }
+
+  if (previous) {
+    report.pdfHistory = [
+      ...(report.pdfHistory || []),
+      {
+        file: previous,
+        source: report.pdfSource || report.templateSnapshot?.source || '',
+        storedAt: report.pdfStoredAt || report.generatedAt || null,
+        replacedAt: new Date(),
+        replacedBy: actorId || null,
+      },
+    ];
+  }
+
+  const stored = await pdfStorage.savePdf(buffer, {
+    fileName,
+    reportId: report._id,
+    companyId: report.companyId,
+    source,
+  });
+  const token = crypto.randomBytes(16).toString('hex');
+
+  report.pdf = { ...stored, url: `/api/reports/${report._id}/pdf?token=${token}` };
+  report.pdfSource = source;
+  report.pdfStoredAt = new Date();
+  report.templateSnapshot = {
+    ...snapshotWithoutPdfBytes(report.templateSnapshot),
+    pdfToken: token,
+    source,
+  };
+}
 
 function normalizeReportStatus(status) {
   if (!status) return REPORT_STATUSES.DRAFT;
@@ -76,6 +144,9 @@ function toReportResponse(report, extras = {}) {
     submittedAt: report.submittedAt || null,
     pageCount: report.pageCount || 0,
     pdfUrl: report.pdf?.url || '',
+    pdfSource: report.pdfSource || report.templateSnapshot?.source || '',
+    /** Earlier PDFs kept for this report (resubmissions never overwrite). */
+    pdfHistoryCount: (report.pdfHistory || []).length,
     generatedAt: report.generatedAt,
     dataSnapshot: report.dataSnapshot || {},
     createdAt: report.createdAt,
@@ -267,6 +338,14 @@ async function updateNarrative(actor, jobId, narrative) {
 
 async function generateReport(actor, jobId, options = {}) {
   const { job, report } = await getOrCreateLatestReport(actor, jobId);
+  // The inspector's package is the evidence of record; a server summary must never replace
+  // it (or the captured data snapshot below). Checked before anything is modified.
+  if (hasInspectorPdf(report)) {
+    throw new HttpError(
+      409,
+      "This report already has the inspector's evidence package PDF. Generating a summary PDF would replace it."
+    );
+  }
   const inspection = await ensureInspection(job, actor);
   const populated = await job.populate([
     { path: 'customerId', select: 'name email phone' },
@@ -422,26 +501,19 @@ async function generateReport(actor, jobId, options = {}) {
       ].filter(Boolean),
     }
   );
-  const token = crypto.randomBytes(16).toString('hex');
+  await storeReportPdf(report, pdfBuffer, {
+    fileName: `${job.jobNumber}-report.pdf`,
+    source: PDF_SOURCE.SERVER,
+    actorId: actor._id,
+  });
 
   report.pdfStatus = REPORT_PDF_STATUSES.READY;
   report.pageCount = 1;
   report.generatedAt = new Date();
-  report.pdf = {
-    bucket: 'local',
-    key: `reports/${report._id}.pdf`,
-    url: `/api/reports/${report._id}/pdf?token=${token}`,
-    mimeType: 'application/pdf',
-    sizeBytes: pdfBuffer.length,
-    checksum: crypto.createHash('sha256').update(pdfBuffer).digest('hex'),
-    originalFileName: `${job.jobNumber}-report.pdf`,
-  };
   report.errorMessage = '';
   report.updatedBy = actor._id;
   report.templateSnapshot = {
-    ...(report.templateSnapshot || {}),
-    pdfToken: token,
-    pdfBase64: pdfBuffer.toString('base64'),
+    ...report.templateSnapshot,
     templateId: template?.id || null,
     templateName: template?.name || '',
     legalFooter: template?.legalFooter || '',
@@ -470,15 +542,23 @@ async function getPdfBuffer(reportId, token) {
     throw new HttpError(403, 'Invalid download token');
   }
 
+  const fileName = report.pdf?.originalFileName || 'report.pdf';
+
+  if (pdfStorage.isGridFsFile(report.pdf)) {
+    try {
+      return { buffer: await pdfStorage.readPdf(report.pdf.key), fileName };
+    } catch {
+      throw new HttpError(404, 'PDF not available');
+    }
+  }
+
+  // Reports stored before GridFS keep their bytes inline until migrated.
   const base64 = report.templateSnapshot?.pdfBase64;
   if (!base64) {
     throw new HttpError(404, 'PDF not available');
   }
 
-  return {
-    buffer: Buffer.from(base64, 'base64'),
-    fileName: report.pdf?.originalFileName || 'report.pdf',
-  };
+  return { buffer: Buffer.from(base64, 'base64'), fileName };
 }
 
 async function shareEvidencePackage(actor, jobId, payload = {}) {
@@ -814,27 +894,21 @@ async function submitInspectorEvidencePackage(inspector, jobId, body = {}) {
       throw new HttpError(400, 'PDF data is empty');
     }
 
-    const token = crypto.randomBytes(16).toString('hex');
+    if (pdfBuffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      throw new HttpError(400, 'Attached file is not a PDF');
+    }
+
     const fileName = body.pdfFileName || `RoofCheck_${job.jobNumber || job._id}.pdf`;
+    // A resubmission keeps the earlier package in pdfHistory instead of overwriting it.
+    await storeReportPdf(report, pdfBuffer, {
+      fileName,
+      source: PDF_SOURCE.INSPECTOR,
+      actorId: inspector._id,
+    });
     report.pdfStatus = REPORT_PDF_STATUSES.READY;
     report.pageCount = report.pageCount || 1;
     report.generatedAt = now;
-    report.pdf = {
-      bucket: 'local',
-      key: `reports/${report._id}.pdf`,
-      url: `/api/reports/${report._id}/pdf?token=${token}`,
-      mimeType: 'application/pdf',
-      sizeBytes: pdfBuffer.length,
-      checksum: crypto.createHash('sha256').update(pdfBuffer).digest('hex'),
-      originalFileName: fileName,
-    };
     report.errorMessage = '';
-    report.templateSnapshot = {
-      ...(report.templateSnapshot || {}),
-      pdfToken: token,
-      pdfBase64: cleaned,
-      source: 'inspector_mobile',
-    };
   } else if (normalizePdfStatus(report) !== REPORT_PDF_STATUSES.READY) {
     report.warnings = [...(report.warnings || []), 'Inspector submitted without an attached PDF'];
   }
@@ -903,4 +977,8 @@ module.exports = {
   submitInspectorEvidencePackage,
   toReportResponse,
   normalizeReportStatus,
+  // Exposed for tests.
+  storeReportPdf,
+  hasInspectorPdf,
+  PDF_SOURCE,
 };
