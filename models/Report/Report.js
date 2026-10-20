@@ -10,6 +10,21 @@ const softDeletePlugin = require('../plugins/softDelete.plugin');
 
 const { Schema } = mongoose;
 
+/** Who produced a stored PDF. Inspector packages are evidence and are never overwritten. */
+const PDF_SOURCES = ['inspector_mobile', 'server_summary'];
+
+/** A PDF that was replaced by a newer one; its GridFS file is kept. */
+const pdfHistoryEntrySchema = new Schema(
+  {
+    file: { type: storageFileSchema, default: () => ({}) },
+    source: { type: String, enum: [...PDF_SOURCES, ''], default: '' },
+    storedAt: { type: Date, default: null },
+    replacedAt: { type: Date, default: Date.now },
+    replacedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  },
+  { _id: false }
+);
+
 /**
  * Inspector assessment report for a job.
  * Review workflow: draft → submitted → under_review → approved | rejected
@@ -44,6 +59,10 @@ const reportSchema = new Schema(
     reviewedAt: { type: Date, default: null },
     submittedAt: { type: Date, default: null },
     pdf: { type: storageFileSchema, default: () => ({}) },
+    pdfSource: { type: String, enum: [...PDF_SOURCES, ''], default: '' },
+    pdfStoredAt: { type: Date, default: null },
+    /** Earlier PDFs for this report, newest last. Bytes stay in GridFS. */
+    pdfHistory: { type: [pdfHistoryEntrySchema], default: [] },
     pageCount: { type: Number, min: 0, default: 0 },
     errorMessage: { type: String, trim: true, maxlength: 1000, default: '' },
     brandingSnapshot: { type: brandingSchema, default: () => ({}) },

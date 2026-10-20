@@ -8,6 +8,7 @@
     "seed:platform": "node scripts/seed-platform-admin.js",
     "seed:plans": "node scripts/seed-plans.js",
     "ingest:storm-events": "node scripts/ingest-storm-events.js",
+    "migrate:report-pdfs": "node scripts/migrate-report-pdfs.js",
     "test": "node --test \"tests/**/*.test.js\""
   },
   "engines": {
