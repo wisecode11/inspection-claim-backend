@@ -43,6 +43,16 @@ router.post(
   reportController.share
 );
 
+router.get(
+  '/:id/pdfs',
+  requireOfficeAccess(PERMISSIONS.REPORTS_REVIEW),
+  reportController.listPdfVersions
+);
+router.get(
+  '/:id/pdfs/:version',
+  requireOfficeAccess(PERMISSIONS.REPORTS_REVIEW),
+  reportController.downloadPdfVersion
+);
 router.get('/:id', requireOfficeAccess(PERMISSIONS.REPORTS_REVIEW), reportController.getById);
 router.post('/:id/submit', requireOfficeAccess(PERMISSIONS.REPORTS_REVIEW), reportController.submit);
 router.post(

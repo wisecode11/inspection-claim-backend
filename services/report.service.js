@@ -561,6 +561,81 @@ async function getPdfBuffer(reportId, token) {
   return { buffer: Buffer.from(base64, 'base64'), fileName };
 }
 
+/**
+ * Every PDF this report has held, oldest first: the entries in pdfHistory, then the
+ * current one. Version numbers are 1-based and stable (history is append-only).
+ */
+function pdfVersionsOf(report) {
+  const history = (report.pdfHistory || []).map((entry, index) => ({
+    version: index + 1,
+    isCurrent: false,
+    file: entry.file || {},
+    source: entry.source || '',
+    storedAt: entry.storedAt || null,
+    replacedAt: entry.replacedAt || null,
+  }));
+
+  const hasCurrent =
+    pdfStorage.isGridFsFile(report.pdf) || Boolean(report.templateSnapshot?.pdfBase64);
+  if (hasCurrent) {
+    history.push({
+      version: history.length + 1,
+      isCurrent: true,
+      file: report.pdf || {},
+      source: report.pdfSource || report.templateSnapshot?.source || '',
+      storedAt: report.pdfStoredAt || report.generatedAt || null,
+      replacedAt: null,
+    });
+  }
+  return history;
+}
+
+async function listPdfVersions(actor, reportId) {
+  const report = await findCompanyReport(actor, reportId);
+  const versions = pdfVersionsOf(report)
+    .map((entry) => ({
+      version: entry.version,
+      isCurrent: entry.isCurrent,
+      source: entry.source,
+      fileName: entry.file.originalFileName || `report-v${entry.version}.pdf`,
+      sizeBytes: entry.file.sizeBytes || 0,
+      checksum: entry.file.checksum || '',
+      storedAt: entry.storedAt,
+      replacedAt: entry.replacedAt,
+    }))
+    .reverse(); // newest first for display
+
+  // Same job details as the report list/detail (customer, inspector, claim, job number).
+  const job = await Job.findOne({ _id: report.jobId, companyId: actor.companyId })
+    .populate('customerId', 'name email phone')
+    .populate('assignedTo', 'email profile');
+  return { report: toReportResponse(report, listExtrasForReport(report, job)), versions };
+}
+
+/** Bytes for one PDF version of a company report (authenticated; no share token needed). */
+async function getPdfVersionBuffer(actor, reportId, versionParam) {
+  const report = await findCompanyReport(actor, reportId);
+  const version = Number.parseInt(versionParam, 10);
+  const entry = pdfVersionsOf(report).find((item) => item.version === version);
+  if (!entry) {
+    throw new HttpError(404, 'PDF version not found');
+  }
+
+  const fileName = entry.file.originalFileName || `report-v${entry.version}.pdf`;
+  if (pdfStorage.isGridFsFile(entry.file)) {
+    try {
+      return { buffer: await pdfStorage.readPdf(entry.file.key), fileName };
+    } catch {
+      throw new HttpError(404, 'PDF file is missing from storage');
+    }
+  }
+  // Current PDF that has not been migrated off inline storage yet.
+  if (entry.isCurrent && report.templateSnapshot?.pdfBase64) {
+    return { buffer: Buffer.from(report.templateSnapshot.pdfBase64, 'base64'), fileName };
+  }
+  throw new HttpError(404, 'PDF file is missing from storage');
+}
+
 async function shareEvidencePackage(actor, jobId, payload = {}) {
   const { job, report } = await getOrCreateLatestReport(actor, jobId);
 
@@ -774,6 +849,21 @@ async function reviewPackage(actor, jobId) {
 }
 
 /**
+ * Why the inspector may not send (another) package right now, or '' when they may.
+ * Allowed: never sent (no report / draft), changes requested (back to draft), rejected.
+ * Blocked: waiting for the admin (submitted / under review) or already approved.
+ */
+function submissionBlockedReason(reportStatus) {
+  if (reportStatus === REPORT_STATUSES.SUBMITTED || reportStatus === REPORT_STATUSES.UNDER_REVIEW) {
+    return 'This evidence package was already sent and is waiting for admin review. You can send again only if the admin rejects it or requests changes.';
+  }
+  if (reportStatus === REPORT_STATUSES.APPROVED) {
+    return 'This evidence package was already approved by the admin.';
+  }
+  return '';
+}
+
+/**
  * Inspector mobile "Send to Admin": attach field PDF + capture payload,
  * mark report submitted, and move the job into the admin review queue.
  */
@@ -789,6 +879,16 @@ async function submitInspectorEvidencePackage(inspector, jobId, body = {}) {
   });
   if (!job) {
     throw new HttpError(404, 'Job not found');
+  }
+
+  // One package per review round: send once, then again only after the admin rejects it
+  // or requests changes. Checked before anything is modified.
+  const latest = await Report.findOne({ jobId: job._id, companyId: inspector.companyId })
+    .sort({ version: -1 })
+    .select('status');
+  const blockedReason = submissionBlockedReason(latest ? normalizeReportStatus(latest.status) : null);
+  if (blockedReason) {
+    throw new HttpError(409, blockedReason);
   }
 
   const inspection = await ensureInspection(job, inspector);
@@ -966,6 +1066,8 @@ module.exports = {
   updateNarrative,
   generateReport,
   getPdfBuffer,
+  listPdfVersions,
+  getPdfVersionBuffer,
   shareEvidencePackage,
   shareReport,
   submitReport,
@@ -978,6 +1080,7 @@ module.exports = {
   toReportResponse,
   normalizeReportStatus,
   // Exposed for tests.
+  submissionBlockedReason,
   storeReportPdf,
   hasInspectorPdf,
   PDF_SOURCE,

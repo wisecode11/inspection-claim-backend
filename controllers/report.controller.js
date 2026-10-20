@@ -125,6 +125,23 @@ const reportController = {
     });
   }),
 
+  listPdfVersions: asyncHandler(async (req, res) => {
+    const data = await reportService.listPdfVersions(req.user, req.params.id);
+    res.status(200).json({ success: true, message: 'PDF versions loaded', data });
+  }),
+
+  downloadPdfVersion: asyncHandler(async (req, res) => {
+    const { buffer, fileName } = await reportService.getPdfVersionBuffer(
+      req.user,
+      req.params.id,
+      req.params.version
+    );
+    const disposition = req.query.inline === '1' ? 'inline' : 'attachment';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${fileName.replace(/"/g, '')}"`);
+    res.send(buffer);
+  }),
+
   downloadPdf: asyncHandler(async (req, res) => {
     const { buffer, fileName } = await reportService.getPdfBuffer(
       req.params.id,
